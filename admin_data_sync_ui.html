@@ -110,38 +110,8 @@
                             <th>詳細資訊</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        <tr>
-                            <td>2024-07-30 10:00:00</td>
-                            <td>官網內容</td>
-                            <td>部分成功</td>
-                            <td>同步完成，新增 12 篇文章，更新 5 篇。3篇文章因格式問題抓取失敗 (IDs: 123, 456, 789)。</td>
-                        </tr>
-                        <tr>
-                            <td>2024-07-30 09:00:15</td>
-                            <td>本地 Word 文件</td>
-                            <td>成功</td>
-                            <td>同步完成，新增 5 份文件，更新 2 份文件。</td>
-                        </tr>
-                        <tr>
-                            <td>2024-07-30 08:30:00</td>
-                            <td>MySQL</td>
-                            <td>成功</td>
-                            <td>同步完成，新增 55 筆病例資料。</td>
-                        </tr>
-                        <tr>
-                            <td>2024-07-29 11:00:00</td>
-                            <td>官網內容</td>
-                            <td>成功</td>
-                            <td>同步完成，新增 10 篇文章。</td>
-                        </tr>
-                        <tr>
-                            <td>2024-07-29 09:05:00</td>
-                            <td>本地 Word 文件</td>
-                            <td>失敗</td>
-                            <td>連接 Word 文件路徑錯誤，請檢查路徑設定。</td>
-                        </tr>
-                        <!-- More log entries -->
+                    <tbody id="syncLogTableBody">
+                        <!-- Log entries will be populated here by JavaScript -->
                     </tbody>
                 </table>
             </div>
@@ -387,18 +357,6 @@
                 loadKnowledgeBaseSummaryStatus();
                 loadSyncLog(); // Call to load sync log as well
 
-                // Example: Populate Word file list (dummy data)
-                const wordFilesList = document.getElementById('word-files-list');
-                if (wordFilesList) {
-                    // In a real scenario, fetch this from an API
-                    const files = ["常年期照護指引.docx", "骨科術後衛教.docx", "肌肉拉傷處理流程.docx"];
-                    if (files.length === 0) {
-                        wordFilesList.innerHTML = '<li>尚無已上傳的 Word 文件。</li>';
-                    } else {
-                        wordFilesList.innerHTML = files.map(file => `<li>${file} <button class="button-small">移除</button></li>`).join('');
-                    }
-                }
-
                 // Example: Populate sitemap status (dummy data)
                 const sitemapStatus = document.getElementById('sitemap-status');
                 if (sitemapStatus) {
@@ -415,9 +373,9 @@
             loadSyncStatus();
 
             async function loadSyncLog() {
-                const syncLogTableBody = document.querySelector(".table-container table tbody");
+                const syncLogTableBody = document.getElementById("syncLogTableBody");
                 if (!syncLogTableBody) {
-                    console.error("Sync log table body not found!");
+                    console.error("Sync log table body (#syncLogTableBody) not found!");
                     return;
                 }
 
