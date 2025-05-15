@@ -8,5 +8,5 @@ numpy # faiss 需要 numpy
 fastapi
 uvicorn[standard] # for running the FastAPI app 
 python-dotenv
-sitemap_parser
+ultimate-sitemap-parser
 python-multipart 
