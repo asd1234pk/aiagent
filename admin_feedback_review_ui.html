@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>回饋審核 - AI 助理管理</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .feedback-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .feedback-table th, .feedback-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+            vertical-align: top;
+        }
+        .feedback-table th {
+            background-color: #f2f2f2;
+        }
+        .feedback-table td .question,
+        .feedback-table td .answer,
+        .feedback-table td .details,
+        .feedback-table td .admin-notes-text {
+            max-height: 150px; /* Limit height */
+            overflow-y: auto;  /* Add scroll for overflow */
+            display: block;    /* Allow max-height and overflow */
+            white-space: pre-wrap; /* Preserve line breaks */
+            word-break: break-word;
+            background-color: #f9f9f9;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        .actions select, .actions button, .actions textarea {
+            margin-right: 5px;
+            margin-bottom: 5px;
+            padding: 6px 10px;
+        }
+        .admin-notes-container textarea {
+            width: calc(100% - 12px); /* Adjust for padding */
+            min-height: 60px;
+        }
+        .status-pending_review { color: orange; font-weight: bold; }
+        .status-reviewed { color: green; }
+        .status-action_taken { color: blue; }
+        .status-ignored { color: grey; }
+        .status-message {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            display: none; /* Hidden by default */
+        }
+        .status-message.success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .status-message.error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <!-- <img src="images/logo_placeholder.png" alt="醫院 Logo"> -->
+            <h1>AI 助理回饋審核</h1>
+        </div>
+        <nav>
+            <a href="admin_dashboard.html">返回管理主控台</a>
+            <a href="index.html">返回系統入口</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <h2>審核使用者回饋</h2>
+            <p>此處列出了使用者針對 AI 回答所提交的回饋。請審核並採取適當行動。</p>
+            
+            <div id="status-message-global" class="status-message"></div>
+            <button id="refresh-feedbacks" class="button">重新整理回饋列表</button>
+
+            <table class="feedback-table">
+                <thead>
+                    <tr>
+                        <th>時間</th>
+                        <th>問題</th>
+                        <th>AI 回答</th>
+                        <th>回饋類型</th>
+                        <th>詳細內容</th>
+                        <th>管理員備註</th>
+                        <th>狀態</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="feedback-list-body">
+                    <!-- Feedback items will be populated here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <footer>
+        <p class="footer-text">&copy; 2024 您的醫院名稱. All Rights Reserved.</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const feedbackListBody = document.getElementById('feedback-list-body');
+            const refreshButton = document.getElementById('refresh-feedbacks');
+            const globalStatusMessageEl = document.getElementById('status-message-global');
+            
+            const API_BASE_URL = 'http://127.0.0.1:8000/api/admin/feedbacks';
+
+            function showGlobalStatus(message, isError = false) {
+                globalStatusMessageEl.textContent = message;
+                globalStatusMessageEl.className = 'status-message'; 
+                if (isError) {
+                    globalStatusMessageEl.classList.add('error');
+                } else {
+                    globalStatusMessageEl.classList.add('success');
+                }
+                globalStatusMessageEl.style.display = 'block';
+                setTimeout(() => { globalStatusMessageEl.style.display = 'none'; }, 5000);
+            }
+
+            async function loadFeedbacks() {
+                showGlobalStatus('正在載入回饋列表...');
+                try {
+                    const response = await fetch(API_BASE_URL);
+                    if (!response.ok) {
+                        throw new Error(`載入回饋失敗: ${response.status}`);
+                    }
+                    const feedbacks = await response.json();
+                    renderFeedbacks(feedbacks);
+                    if (feedbacks.length === 0) {
+                        showGlobalStatus('目前沒有待審核的回饋。');
+                    } else {
+                         showGlobalStatus('回饋列表已載入。');
+                    }
+                } catch (error) {
+                    console.error('載入回饋 API 錯誤:', error);
+                    showGlobalStatus(error.message, true);
+                    feedbackListBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:red;">無法載入回饋：${error.message}</td></tr>`;
+                }
+            }
+
+            function renderFeedbacks(feedbacks) {
+                feedbackListBody.innerHTML = ''; // Clear existing rows
+                if (!feedbacks || feedbacks.length === 0) {
+                    feedbackListBody.innerHTML = '<tr><td colspan="8" style="text-align:center;">目前沒有回饋。</td></tr>';
+                    return;
+                }
+
+                feedbacks.forEach(fb => {
+                    const row = feedbackListBody.insertRow();
+                    row.insertCell().textContent = new Date(fb.timestamp).toLocaleString();
+                    row.insertCell().innerHTML = `<div class="question">${fb.question || 'N/A'}</div>`;
+                    row.insertCell().innerHTML = `<div class="answer">${fb.answer}</div>`;
+                    row.insertCell().textContent = fb.feedback_type;
+                    row.insertCell().innerHTML = `<div class="details">${fb.details || 'N/A'}</div>`;
+                    
+                    const adminNotesCell = row.insertCell();
+                    adminNotesCell.innerHTML = `<div class="admin-notes-text" id="notes-text-${fb.id}">${fb.admin_notes || ''}</div>`;
+
+                    const statusCell = row.insertCell();
+                    statusCell.innerHTML = `<span id="status-${fb.id}" class="status-${fb.status.replace(/\s+/g, '_')}">${fb.status}</span>`;
+                    
+                    const actionsCell = row.insertCell();
+                    actionsCell.classList.add('actions');
+
+                    // Status update dropdown
+                    const statusSelect = document.createElement('select');
+                    statusSelect.id = `status-select-${fb.id}`;
+                    const statuses = {
+                        "pending_review": "待審核",
+                        "reviewed": "已審核",
+                        "action_taken": "已處理",
+                        "ignored": "已忽略"
+                    };
+                    for (const [value, text] of Object.entries(statuses)) {
+                        const option = document.createElement('option');
+                        option.value = value;
+                        option.textContent = text;
+                        if (value === fb.status) {
+                            option.selected = true;
+                        }
+                        statusSelect.appendChild(option);
+                    }
+                    actionsCell.appendChild(statusSelect);
+
+                    // Admin notes textarea
+                    const notesTextarea = document.createElement('textarea');
+                    notesTextarea.id = `notes-input-${fb.id}`;
+                    notesTextarea.placeholder = "新增或修改備註...";
+                    notesTextarea.value = fb.admin_notes || '';
+                    const notesContainer = document.createElement('div');
+                    notesContainer.classList.add('admin-notes-container');
+                    notesContainer.appendChild(notesTextarea);
+                    actionsCell.appendChild(notesContainer);
+
+                    // Save button
+                    const saveButton = document.createElement('button');
+                    saveButton.textContent = '儲存變更';
+                    saveButton.onclick = async () => {
+                        const newStatus = document.getElementById(`status-select-${fb.id}`).value;
+                        const newNotes = document.getElementById(`notes-input-${fb.id}`).value;
+                        await updateFeedback(fb.id, newStatus, newNotes);
+                    };
+                    actionsCell.appendChild(saveButton);
+                });
+            }
+
+            async function updateFeedback(feedbackId, status, adminNotes) {
+                showGlobalStatus(`正在更新回饋 ${feedbackId}...`);
+                try {
+                    const response = await fetch(`${API_BASE_URL}/${feedbackId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ status: status, admin_notes: adminNotes }),
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => null);
+                        throw new Error(`更新失敗: ${response.status} ${errorData ? errorData.detail : ''}`);
+                    }
+                    const updatedFb = await response.json();
+                    showGlobalStatus(`回饋 ${feedbackId} 已更新！`);
+                    // Update the specific row in the table directly for better UX than full reload
+                    document.getElementById(`status-${feedbackId}`).textContent = updatedFb.status;
+                    document.getElementById(`status-${feedbackId}`).className = `status-${updatedFb.status.replace(/\s+/g, '_')}`;
+                    document.getElementById(`notes-text-${feedbackId}`).textContent = updatedFb.admin_notes || '';
+                    document.getElementById(`notes-input-${feedbackId}`).value = updatedFb.admin_notes || ''; // also update textarea
+                } catch (error) {
+                    console.error('更新回饋 API 錯誤:', error);
+                    showGlobalStatus(error.message, true);
+                }
+            }
+
+            if (refreshButton) {
+                refreshButton.addEventListener('click', loadFeedbacks);
+            }
+
+            // Initial load
+            loadFeedbacks();
+        });
+    </script>
+</body>
+</html> 

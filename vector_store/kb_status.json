@@ -1,0 +1,26 @@
+{
+    "overall_status": {
+        "last_full_rebuild_timestamp": "2025-05-15T11:34:32.793914",
+        "last_any_sync_timestamp": "2025-05-15T11:34:32.793914",
+        "total_indexed_vectors": 292,
+        "message": "知識庫已成功更新。"
+    },
+    "sources": {
+        "website": {
+            "last_sync_timestamp": "2025-05-15T11:34:32.793914",
+            "status": "success",
+            "message": "知識庫已成功更新。",
+            "processed_items": 228,
+            "embedded_items": 228,
+            "target_config_url": "https://www.ohealth.com.tw/sitemap.xml"
+        },
+        "word_documents": {
+            "last_sync_timestamp": "2025-05-15T11:34:32.793914",
+            "status": "success",
+            "message": "知識庫已成功更新。",
+            "processed_items": 64,
+            "embedded_items": 64,
+            "target_config_url": "knowledge_docs/word_documents"
+        }
+    }
+}

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>櫃台 AI 醫療諮詢助理</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <!-- <img src="images/logo_placeholder.png" alt="醫院 Logo"> -->
+            <h1>櫃台 AI 醫療諮詢助理</h1>
+        </div>
+        <nav>
+            <a href="index.html">返回入口</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <h2>即時諮詢</h2>
+            <div class="chat-container">
+                <div class="chat-messages" id="chatMessages">
+                    <!-- Messages will appear here -->
+                    <div class="message ai-message">
+                        <p>您好！我是您的 AI 醫療諮詢助理，請問有什麼可以協助您的嗎？</p>
+                    </div>
+                    <!-- Removed mock user and AI messages -->
+                </div>
+                <div id="thinking" style="display: none; text-align: center; padding: 10px;">正在思考中...</div>
+                <form id="chat-form"> <!-- Added form element -->
+                    <div class="chat-input">
+                        <textarea id="userInput" placeholder="請在此輸入您的問題..." rows="1"></textarea>
+                        <button type="submit" class="button" id="sendMessage">傳送</button> <!-- Changed to type submit -->
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p class="footer-text">&copy; 2024 您的醫院名稱. All Rights Reserved.</p>
+    </footer>
+
+    <script>
+        const textarea = document.getElementById('userInput'); // Still needed for auto-resize
+        textarea.addEventListener('input', () => {
+            textarea.style.height = 'auto'; // Reset height
+            textarea.style.height = textarea.scrollHeight + 'px'; // Set to content height
+        });
+
+        // Corrected IDs and form handling
+        const chatHistory = document.getElementById('chatMessages'); // Corrected ID
+        const chatForm = document.getElementById('chat-form');       // Corrected: now points to the form
+        const messageInput = document.getElementById('userInput');   // Corrected ID
+        const thinkingIndicator = document.getElementById('thinking');
+
+        chatForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const userMessage = messageInput.value.trim();
+
+            if (!userMessage) {
+                return;
+            }
+
+            appendMessage('user', userMessage);
+            messageInput.value = '';
+            textarea.style.height = 'auto'; // Reset textarea height after sending
+            messageInput.disabled = true;
+            if(thinkingIndicator) thinkingIndicator.style.display = 'block';
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: userMessage }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    let errorMessage = `API 錯誤: ${response.status}`;
+                    if (errorData && errorData.detail) {
+                        errorMessage += ` - ${errorData.detail}`;
+                    }
+                    appendMessage('assistant', errorMessage, [], true);
+                    return;
+                }
+
+                const data = await response.json();
+                appendMessage('assistant', data.answer, data.sources);
+
+            } catch (error) {
+                console.error('呼叫 API 時發生錯誤:', error);
+                appendMessage('assistant', '抱歉，無法連接到助理服務。請稍後再試。', [], true);
+            } finally {
+                messageInput.disabled = false;
+                if(thinkingIndicator) thinkingIndicator.style.display = 'none';
+                messageInput.focus();
+            }
+        });
+
+        function appendMessage(sender, text, sources = [], isError = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', `${sender}-message`);
+            if (isError) {
+                messageDiv.classList.add('error-message');
+            }
+
+            const contentP = document.createElement('p');
+            contentP.innerHTML = text.replace(/\n/g, '<br>');
+            messageDiv.appendChild(contentP);
+
+            if (sources && sources.length > 0) {
+                const sourcesTitle = document.createElement('h5');
+                sourcesTitle.textContent = '參考來源:';
+                messageDiv.appendChild(sourcesTitle);
+
+                const sourcesList = document.createElement('ul');
+                sourcesList.classList.add('sources-list');
+                sources.forEach(source => {
+                    const listItem = document.createElement('li');
+                    const link = document.createElement('a');
+                    link.href = source.url;
+                    link.textContent = `${source.title} (相似度: ${source.score.toFixed(4)})`;
+                    link.target = '_blank';
+                    listItem.appendChild(link);
+                    sourcesList.appendChild(listItem);
+                });
+                messageDiv.appendChild(sourcesList);
+            }
+            
+            if (sender === 'assistant' && !isError) {
+                const feedbackDiv = document.createElement('div');
+                feedbackDiv.classList.add('feedback-buttons');
+                
+                let lastUserQuestionText = 'N/A';
+                const messages = chatHistory.getElementsByClassName('message');
+                if (messages.length > 1) {
+                    for (let i = messages.length - 2; i >= 0; i--) {
+                        if (messages[i].classList.contains('user-message')) {
+                            const userPara = messages[i].querySelector('p');
+                            if (userPara) {
+                                lastUserQuestionText = userPara.textContent || userPara.innerText;
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                const goodButton = document.createElement('button');
+                goodButton.textContent = '👍 好評';
+                goodButton.onclick = () => submitFeedbackToServer(lastUserQuestionText, text, 'good');
+                feedbackDiv.appendChild(goodButton);
+                
+                const badButton = document.createElement('button');
+                badButton.textContent = '👎 待改進';
+                badButton.onclick = () => submitFeedbackToServer(lastUserQuestionText, text, 'bad');
+                feedbackDiv.appendChild(badButton);
+                
+                const detailButton = document.createElement('button');
+                detailButton.textContent = '📝 詳細回饋';
+                detailButton.onclick = () => openDetailedFeedback(lastUserQuestionText, text);
+                feedbackDiv.appendChild(detailButton);
+                
+                messageDiv.appendChild(feedbackDiv);
+            }
+
+            chatHistory.appendChild(messageDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        async function submitFeedbackToServer(question, answer, feedbackType, details = null) {
+            console.log(`提交回饋: 問題="${question}", 回答="${answer}", 類型=${feedbackType}, 細節=${details}`);
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question: question,
+                        answer: answer,
+                        feedback_type: feedbackType,
+                        details: details
+                    }),
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    alert(`感謝您的回饋 (ID: ${result.feedback_id})！`);
+                } else {
+                    alert(`提交回饋失敗: ${result.detail || '未知錯誤'}`);
+                }
+            } catch (error) {
+                console.error('提交回饋 API 錯誤:', error);
+                alert('提交回饋時發生連接錯誤。');
+            }
+        }
+
+        function openDetailedFeedback(question, answer) {
+            localStorage.setItem('questionForFeedback', question);
+            localStorage.setItem('answerForFeedback', answer);
+            window.location.href = 'detailed_feedback_ui.html';
+        }
+
+    </script>
+</body>
+</html> 

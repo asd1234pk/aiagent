@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 助理提示設定 - 管理介面</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .form-group label {
+            font-weight: bold;
+            margin-bottom: 8px;
+            display: block;
+        }
+        textarea, input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+        textarea {
+            min-height: 150px;
+            font-family: monospace; /* Better for seeing placeholders */
+        }
+        .info-text {
+            font-size: 0.9rem;
+            color: #555;
+            margin-bottom: 15px;
+        }
+        .status-message {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            display: none; /* Hidden by default */
+        }
+        .status-message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .last-updated-info {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <h1>AI 助理提示設定</h1>
+        </div>
+        <nav>
+            <a href="admin_dashboard.html">返回管理主控台</a>
+            <a href="index.html">返回系統入口</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <h2>編輯 AI 提示與行為設定</h2>
+            <p class="info-text">
+                此處設定將直接影響 AI 助理的回答方式、語氣和專業度。<br>
+                在「使用者提示模板」中，<code>{context_str}</code> 和 <code>{user_question}</code> 是系統會自動替換的占位符，請務必保留它們。
+            </p>
+
+            <div id="status-message" class="status-message"></div>
+
+            <form id="prompt-settings-form">
+                <div class="form-group">
+                    <label for="system_message">系統訊息 (System Message):</label>
+                    <textarea id="system_message" name="system_message" rows="6" placeholder="例如：您是一個專業的醫院櫃台 AI 助理..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="user_prompt_template">使用者提示模板 (User Prompt Template):</label>
+                    <textarea id="user_prompt_template" name="user_prompt_template" rows="12" placeholder="例如：作為 Ohealth 醫院的 AI 醫療諮詢助理，請嚴格依照以下「上下文資訊」..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="temperature">Temperature (創意度/隨機性):</label>
+                    <input type="number" id="temperature" name="temperature" step="0.1" min="0.0" max="2.0" placeholder="例如：0.3 (建議範圍 0.0 - 1.0)">
+                    <p class="info-text">值越高 (例如 0.8)，回答越隨機/有創意；值越低 (例如 0.2)，回答越固定/保守。建議醫療相關應用保持較低值。</p>
+                </div>
+                
+                <div class="last-updated-info">
+                    最後更新者：<span id="last_updated_by">N/A</span><br>
+                    最後更新時間：<span id="last_updated_at">N/A</span>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" id="load-settings-btn" class="button">載入目前設定</button>,
+                    <button type="submit" class="button button-primary">儲存設定</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <footer>
+        <p class="footer-text">&copy; 2024 您的醫院名稱. All Rights Reserved.</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('prompt-settings-form');
+            const systemMessageEl = document.getElementById('system_message');
+            const userPromptTemplateEl = document.getElementById('user_prompt_template');
+            const temperatureEl = document.getElementById('temperature');
+            const loadBtn = document.getElementById('load-settings-btn');
+            const statusMessageEl = document.getElementById('status-message');
+            const lastUpdatedByEl = document.getElementById('last_updated_by');
+            const lastUpdatedAtEl = document.getElementById('last_updated_at');
+
+            const API_URL = 'http://127.0.0.1:8000/api/admin/prompt-settings';
+
+            function showStatus(message, isError = false) {
+                statusMessageEl.textContent = message;
+                statusMessageEl.className = 'status-message'; // Reset classes
+                if (isError) {
+                    statusMessageEl.classList.add('error');
+                } else {
+                    statusMessageEl.classList.add('success');
+                }
+                statusMessageEl.style.display = 'block';
+            }
+
+            async function loadSettings() {
+                showStatus('正在載入設定...', false);
+                try {
+                    const response = await fetch(API_URL);
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ detail: '無法解析錯誤回應' }));
+                        throw new Error(`載入設定失敗: ${response.status} ${errorData.detail || response.statusText}`);
+                    }
+                    const settings = await response.json();
+                    systemMessageEl.value = settings.system_message;
+                    userPromptTemplateEl.value = settings.user_prompt_template;
+                    temperatureEl.value = settings.temperature;
+                    lastUpdatedByEl.textContent = settings.last_updated_by || 'N/A';
+                    lastUpdatedAtEl.textContent = settings.last_updated_at ? new Date(settings.last_updated_at).toLocaleString() : 'N/A';
+                    showStatus('設定已成功載入！', false);
+                } catch (error) {
+                    console.error('載入設定錯誤:', error);
+                    showStatus(error.message, true);
+                }
+            }
+
+            loadBtn.addEventListener('click', loadSettings);
+
+            form.addEventListener('submit', async function(event) {
+                event.preventDefault();
+                showStatus('正在儲存設定...', false);
+
+                const dataToSave = {
+                    system_message: systemMessageEl.value,
+                    user_prompt_template: userPromptTemplateEl.value,
+                    temperature: parseFloat(temperatureEl.value)
+                };
+
+                if (isNaN(dataToSave.temperature)) {
+                    showStatus('Temperature 必須是有效的數字。', true);
+                    temperatureEl.focus();
+                    return;
+                }
+
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(dataToSave),
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ detail: '無法解析錯誤回應' }));
+                        throw new Error(`儲存設定失敗: ${response.status} ${errorData.detail || response.statusText}`);
+                    }
+                    
+                    const savedSettings = await response.json();
+                    // Update displayed last updated info
+                    lastUpdatedByEl.textContent = savedSettings.last_updated_by || 'N/A';
+                    lastUpdatedAtEl.textContent = savedSettings.last_updated_at ? new Date(savedSettings.last_updated_at).toLocaleString() : 'N/A';
+                    
+                    showStatus('設定已成功儲存並套用！', false);
+                    // Optionally, can also update the form fields with the response if anything was auto-corrected by backend, though usually not necessary for this type of save.
+
+                } catch (error) {
+                    console.error('儲存設定錯誤:', error);
+                    showStatus(error.message, true);
+                }
+            });
+
+            // Automatically load settings when the page loads
+            loadSettings();
+        });
+    </script>
+</body>
+</html> 

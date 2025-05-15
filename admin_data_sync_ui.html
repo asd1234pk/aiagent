@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>資料同步管理 - 知識庫管理</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <!-- <img src="images/logo_placeholder.png" alt="醫院 Logo"> -->
+            <h1>知識庫管理 - 資料同步</h1>
+        </div>
+        <nav>
+            <a href="admin_dashboard.html">返回管理主控台</a>
+            <a href="index.html">返回入口</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <h2>資料同步與知識庫管理</h2>
+
+            <div class="sync-section">
+                <h3>知識庫整體管理</h3>
+                <p>您可以手動觸發知識庫的完整重建。此過程可能會需要數分鐘，請耐心等候。</p>
+                <button id="rebuild-kb-button" class="button">立即重建知識庫</button>
+                <div id="rebuild-status" class="status-message" style="margin-top: 15px;"></div>
+                <div id="kb-summary-status" class="status-summary-card" style="margin-top: 20px; padding: 15px; border: 1px solid #eee; border-radius: 5px; background-color: #f9f9f9;">
+                    <h4>知識庫狀態摘要</h4>
+                    <p>正在載入狀態...</p>
+                </div>
+            </div>
+
+            <hr style="margin: 30px 0;">
+
+            <div class="sync-section">
+                <h3>資料來源同步管理</h3>
+                <p>管理並追蹤來自不同資料來源的知識同步狀態。</p>
+
+                <div class="card">
+                    <div class="card-header">本地 Word 文件</div>
+                    <p>來源路徑：<span id="localWordPath">/data/knowledge_docs/</span> (範例)</p>
+                    <p>上次同步時間：<span id="localWordLastSync">2024-07-30 09:00:15</span></p>
+                    <p>狀態：<span id="localWordSyncStatus" style="color: green;">同步成功</span></p>
+                    <p>已索引文件數量：<span id="localWordDocCount">152</span> 份</p>
+                    <button class="button" id="triggerLocalWordSync">立即同步本地 Word 文件</button>
+                    <p style="margin-top:10px;"><small><em>此操作將會掃描指定目錄中的 Word 文件，進行處理並更新至向量資料庫。</em></small></p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">醫院官方網站內容</div>
+                    <p>目標網址：<span id="websiteUrl">https://yourhospital.example.com/articles/</span></p>
+                    <p>上次同步時間：<span id="websiteLastSync">2024-07-30 10:00:00</span></p>
+                    <p>狀態：<span id="websiteSyncStatus" style="color: darkorange;">部分成功 (3篇文章抓取失敗)</span></p>
+                    <p>已索引文章數量：<span id="websiteArticleCount">88</span> 篇</p>
+                    <button class="button" id="triggerWebsiteSync">立即同步官網內容</button>
+                    <p style="margin-top:10px;"><small><em>此操作將會嘗試抓取官網指定路徑下的文章內容，進行處理並更新至向量資料庫。</em></small></p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">MySQL 病例資料庫</div>
+                    <p>上次同步時間：<span id="mysqlLastSync">2024-07-30 08:30:00</span></p>
+                    <p>狀態：<span id="mysqlSyncStatus" style="color: green;">同步成功</span></p>
+                    <p>已索引病例筆數：<span id="mysqlRecordCount">5,870</span> 筆 (近一年符合條件者)</p>
+                    <button class="button" id="triggerMysqlSync">立即同步 MySQL 病例</button>
+                     <p style="margin-top:10px;"><small><em>此操作將會從 MySQL 病例系統中提取相關欄位，轉換格式並更新至向量資料庫。</em></small></p>
+                </div>
+            </div>
+
+            <h3>同步日誌 (最近 10 筆)</h3>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>時間</th>
+                            <th>資料來源</th>
+                            <th>狀態</th>
+                            <th>詳細資訊</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>2024-07-30 10:00:00</td>
+                            <td>官網內容</td>
+                            <td>部分成功</td>
+                            <td>同步完成，新增 12 篇文章，更新 5 篇。3篇文章因格式問題抓取失敗 (IDs: 123, 456, 789)。</td>
+                        </tr>
+                        <tr>
+                            <td>2024-07-30 09:00:15</td>
+                            <td>本地 Word 文件</td>
+                            <td>成功</td>
+                            <td>同步完成，新增 5 份文件，更新 2 份文件。</td>
+                        </tr>
+                        <tr>
+                            <td>2024-07-30 08:30:00</td>
+                            <td>MySQL</td>
+                            <td>成功</td>
+                            <td>同步完成，新增 55 筆病例資料。</td>
+                        </tr>
+                        <tr>
+                            <td>2024-07-29 11:00:00</td>
+                            <td>官網內容</td>
+                            <td>成功</td>
+                            <td>同步完成，新增 10 篇文章。</td>
+                        </tr>
+                        <tr>
+                            <td>2024-07-29 09:05:00</td>
+                            <td>本地 Word 文件</td>
+                            <td>失敗</td>
+                            <td>連接 Word 文件路徑錯誤，請檢查路徑設定。</td>
+                        </tr>
+                        <!-- More log entries -->
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+    </div>
+
+    <footer>
+        <p class="footer-text">&copy; 2024 您的醫院名稱. All Rights Reserved.</p>
+    </footer>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Rebuild Knowledge Base Button
+            const rebuildKbButton = document.getElementById('rebuild-kb-button');
+            const rebuildStatusDiv = document.getElementById('rebuild-status');
+            const kbSummaryStatusDiv = document.getElementById('kb-summary-status'); 
+            const apiBaseUrl = 'http://127.0.0.1:8000/api/admin'; 
+
+            // Website Sync Elements
+            const triggerWebsiteSyncButton = document.getElementById('triggerWebsiteSync');
+            const websiteLastSyncSpan = document.getElementById('websiteLastSync');
+            const websiteSyncStatusSpan = document.getElementById('websiteSyncStatus');
+            const websiteArticleCountSpan = document.getElementById('websiteArticleCount');
+            const websiteUrlSpan = document.getElementById('websiteUrl');
+
+            // Word Documents Sync Elements (New)
+            const triggerLocalWordSyncButton = document.getElementById('triggerLocalWordSync');
+            const localWordPathSpan = document.getElementById('localWordPath');
+            const localWordLastSyncSpan = document.getElementById('localWordLastSync');
+            const localWordSyncStatusSpan = document.getElementById('localWordSyncStatus');
+            const localWordDocCountSpan = document.getElementById('localWordDocCount');
+
+            async function loadKnowledgeBaseSummaryStatus() {
+                if (kbSummaryStatusDiv) {
+                    kbSummaryStatusDiv.innerHTML = '<p>正在更新知識庫狀態摘要...</p>';
+                }
+                if (websiteSyncStatusSpan) { 
+                    websiteSyncStatusSpan.textContent = '載入中...';
+                    websiteSyncStatusSpan.style.color = 'grey';
+                }
+                if (localWordSyncStatusSpan) { // Add for Word docs card
+                    localWordSyncStatusSpan.textContent = '載入中...';
+                    localWordSyncStatusSpan.style.color = 'grey';
+                }
+                // Add similar for other cards (MySQL) when they become dynamic
+
+                try {
+                    const response = await fetch(`${apiBaseUrl}/knowledgebase/status`);
+                    const data = await response.json();
+
+                    // Update Overall Summary Status
+                    if (kbSummaryStatusDiv) {
+                        if (response.ok && data.overall_status) {
+                            const overall = data.overall_status;
+                            let summaryHtml = `<h4>知識庫狀態摘要</h4>
+                                <p><strong>整體狀態訊息：</strong> ${overall.message || 'N/A'}</p>
+                                <p><strong>上次完整重建時間：</strong> ${overall.last_full_rebuild_timestamp ? new Date(overall.last_full_rebuild_timestamp).toLocaleString() : '尚未執行'}</p>
+                                <p><strong>任何來源上次同步時間：</strong> ${overall.last_any_sync_timestamp ? new Date(overall.last_any_sync_timestamp).toLocaleString() : '尚未執行'}</p>
+                                <p><strong>索引中總向量數：</strong> ${overall.total_indexed_vectors !== null ? overall.total_indexed_vectors : 'N/A'}</p>`;
+                            if (data.status && data.status !== 'success_loaded') { 
+                                summaryHtml += `<p style="color:red;"><strong>系統提示：</strong> ${data.message} ${data.error_message ? '(' + data.error_message + ')' : ''}</p>`;
+                            }
+                            kbSummaryStatusDiv.innerHTML = summaryHtml;
+                        } else {
+                            kbSummaryStatusDiv.innerHTML = `<h4>知識庫狀態摘要</h4><p>${data.message || '無法載入知識庫整體狀態。'}</p>`;
+                            if(data.error_message) kbSummaryStatusDiv.innerHTML += `<p style="color:red;">錯誤: ${data.error_message}</p>`;
+                        }
+                    }
+
+                    // Update Website Source Card
+                    if (data.sources && data.sources.website) {
+                        const websiteData = data.sources.website;
+                        if (websiteLastSyncSpan) websiteLastSyncSpan.textContent = websiteData.last_sync_timestamp ? new Date(websiteData.last_sync_timestamp).toLocaleString() : '尚未同步';
+                        if (websiteSyncStatusSpan) {
+                            websiteSyncStatusSpan.textContent = `${websiteData.status || 'N/A'} - ${websiteData.message || ''}`;
+                            if (websiteData.status === 'success') websiteSyncStatusSpan.style.color = 'green';
+                            else if (websiteData.status && websiteData.status.includes('error')) websiteSyncStatusSpan.style.color = 'red';
+                            else if (websiteData.status === 'pending' || websiteData.status === 'pending_rebuild') websiteSyncStatusSpan.style.color = 'orange';
+                            else websiteSyncStatusSpan.style.color = 'grey'; 
+                        }
+                        if (websiteArticleCountSpan) {
+                            const itemCount = websiteData.embedded_items;
+                            websiteArticleCountSpan.textContent = `${itemCount !== null && itemCount !== undefined ? itemCount : '0'} 篇`; 
+                        }
+                        if (websiteUrlSpan) { 
+                            websiteUrlSpan.textContent = websiteData.target_config_url || '(未配置或未知)';
+                        }
+                    } else if (websiteSyncStatusSpan) {
+                        websiteSyncStatusSpan.textContent = '網站來源狀態資訊不可用。';
+                        websiteSyncStatusSpan.style.color = 'grey';
+                    }
+
+                    // Update Word Documents Source Card (New)
+                    if (data.sources && data.sources.word_documents) {
+                        const wordData = data.sources.word_documents;
+                        if (localWordPathSpan) localWordPathSpan.textContent = wordData.target_config_url || '(未配置或未知)';
+                        if (localWordLastSyncSpan) localWordLastSyncSpan.textContent = wordData.last_sync_timestamp ? new Date(wordData.last_sync_timestamp).toLocaleString() : '尚未同步';
+                        if (localWordSyncStatusSpan) {
+                            localWordSyncStatusSpan.textContent = `${wordData.status || 'N/A'} - ${wordData.message || ''}`;
+                            if (wordData.status === 'success') localWordSyncStatusSpan.style.color = 'green';
+                            else if (wordData.status && wordData.status.includes('error')) localWordSyncStatusSpan.style.color = 'red';
+                            else if (wordData.status === 'pending' || wordData.status === 'pending_rebuild') localWordSyncStatusSpan.style.color = 'orange';
+                            else localWordSyncStatusSpan.style.color = 'grey';
+                        }
+                        if (localWordDocCountSpan) {
+                            const itemCount = wordData.embedded_items;
+                            // 假設 embedded_items 反映了此來源的計數，後端應確保填充此值
+                            localWordDocCountSpan.textContent = `${itemCount !== null && itemCount !== undefined ? itemCount : '0'} 份`; 
+                        }
+                    } else if (localWordSyncStatusSpan) {
+                        localWordSyncStatusSpan.textContent = 'Word 文件來源狀態資訊不可用。';
+                        localWordSyncStatusSpan.style.color = 'grey';
+                    }
+
+                } catch (error) {
+                    console.error('載入知識庫狀態 API 錯誤:', error);
+                    if (kbSummaryStatusDiv) kbSummaryStatusDiv.innerHTML = '<h4>知識庫狀態摘要</h4><p style="color:red;">無法連接到伺服器或載入整體狀態時發生錯誤。</p>';
+                    if (websiteSyncStatusSpan) {
+                         websiteSyncStatusSpan.textContent = '無法載入狀態';
+                         websiteSyncStatusSpan.style.color = 'red';
+                    }
+                    if (localWordSyncStatusSpan) { // Also update for Word docs card on error
+                        localWordSyncStatusSpan.textContent = '無法載入狀態';
+                        localWordSyncStatusSpan.style.color = 'red';
+                    }
+                }
+            }
+
+            if (rebuildKbButton) {
+                rebuildKbButton.addEventListener('click', async () => {
+                    if (!confirm('您確定要立即重建整個知識庫嗎？此操作可能耗時較長。')) {
+                        return;
+                    }
+
+                    rebuildStatusDiv.textContent = '正在傳送重建知識庫請求，請稍候...';
+                    rebuildStatusDiv.className = 'status-message info'; // Use a general info class
+                    rebuildStatusDiv.style.display = 'block';
+                    rebuildKbButton.disabled = true;
+
+                    try {
+                        const response = await fetch(`${apiBaseUrl}/knowledgebase/rebuild`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                                // No body needed for this POST request as per current backend
+                            }
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok) {
+                            rebuildStatusDiv.textContent = `知識庫重建成功： ${result.message}`;
+                            rebuildStatusDiv.className = 'status-message success';
+                            loadKnowledgeBaseSummaryStatus(); // Reload summary after successful rebuild
+                        } else {
+                            rebuildStatusDiv.textContent = `知識庫重建失敗： ${result.detail || result.message || '未知錯誤'}`;
+                            rebuildStatusDiv.className = 'status-message error';
+                        }
+                    } catch (error) {
+                        console.error('重建知識庫 API 呼叫錯誤:', error);
+                        rebuildStatusDiv.textContent = `重建知識庫時發生客戶端錯誤： ${error.message}`;
+                        rebuildStatusDiv.className = 'status-message error';
+                    } finally {
+                        rebuildKbButton.disabled = false;
+                        // Optional: hide status message after some time
+                        // setTimeout(() => { rebuildStatusDiv.style.display = 'none'; }, 10000);
+                    }
+                });
+            }
+
+            // Event listener for Website Sync Button
+            if (triggerWebsiteSyncButton) {
+                triggerWebsiteSyncButton.addEventListener('click', async () => {
+                    if (!confirm('您確定要立即同步官網內容嗎？')) {
+                        return;
+                    }
+                    if(rebuildStatusDiv) {
+                        rebuildStatusDiv.textContent = '正在傳送同步官網內容請求，請稍候...';
+                        rebuildStatusDiv.className = 'status-message info';
+                        rebuildStatusDiv.style.display = 'block';
+                    }
+                    triggerWebsiteSyncButton.disabled = true;
+                    await processSyncRequest('website', triggerWebsiteSyncButton);
+                });
+            }
+
+            // Event listener for Local Word Sync Button (New)
+            if (triggerLocalWordSyncButton) {
+                triggerLocalWordSyncButton.addEventListener('click', async () => {
+                    if (!confirm('您確定要立即同步本地 Word 文件內容嗎？')) {
+                        return;
+                    }
+                    if(rebuildStatusDiv) { // Reusing global status div for simplicity
+                        rebuildStatusDiv.textContent = '正在傳送同步本地 Word 文件請求，請稍候...';
+                        rebuildStatusDiv.className = 'status-message info';
+                        rebuildStatusDiv.style.display = 'block';
+                    }
+                    triggerLocalWordSyncButton.disabled = true;
+                    await processSyncRequest('word_documents', triggerLocalWordSyncButton);
+                });
+            }
+
+            // Generic function to handle sync requests for different sources
+            async function processSyncRequest(sourceName, buttonElement) {
+                try {
+                    const response = await fetch(`${apiBaseUrl}/sync/${sourceName}`, { method: 'POST' });
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        if(rebuildStatusDiv) rebuildStatusDiv.textContent = `資料來源 '${sourceName}' 同步成功：${result.message}`;
+                        if(rebuildStatusDiv) rebuildStatusDiv.className = 'status-message success';
+                    } else {
+                        if(rebuildStatusDiv) rebuildStatusDiv.textContent = `資料來源 '${sourceName}' 同步失敗：${result.detail || result.message || '未知錯誤'}`;
+                        if(rebuildStatusDiv) rebuildStatusDiv.className = 'status-message error';
+                    }
+                } catch (error) {
+                    console.error(`同步資料來源 '${sourceName}' API 呼叫錯誤:`, error);
+                    if(rebuildStatusDiv) rebuildStatusDiv.textContent = `同步資料來源 '${sourceName}' 時發生客戶端錯誤： ${error.message}`;
+                    if(rebuildStatusDiv) rebuildStatusDiv.className = 'status-message error';
+                } finally {
+                    if (buttonElement) buttonElement.disabled = false;
+                    loadKnowledgeBaseSummaryStatus(); // Refresh all statuses
+                    loadSyncLog(); // Reload sync log
+                    if(rebuildStatusDiv) setTimeout(() => { rebuildStatusDiv.style.display = 'none'; }, 7000);
+                }
+            }
+
+            // Placeholder for other sync functions if any
+            // e.g., loadSyncStatus, handleWordFileSync, handleDbSync etc.
+            function loadSyncStatus() {
+                // This function could fetch and display current sync status for different data sources
+                console.log("loadSyncStatus called - to be implemented for other source cards initially");
+
+                // Load knowledge base summary on initial page load
+                loadKnowledgeBaseSummaryStatus();
+                loadSyncLog(); // Call to load sync log as well
+
+                // Example: Populate Word file list (dummy data)
+                const wordFilesList = document.getElementById('word-files-list');
+                if (wordFilesList) {
+                    // In a real scenario, fetch this from an API
+                    const files = ["常年期照護指引.docx", "骨科術後衛教.docx", "肌肉拉傷處理流程.docx"];
+                    if (files.length === 0) {
+                        wordFilesList.innerHTML = '<li>尚無已上傳的 Word 文件。</li>';
+                    } else {
+                        wordFilesList.innerHTML = files.map(file => `<li>${file} <button class="button-small">移除</button></li>`).join('');
+                    }
+                }
+
+                // Example: Populate sitemap status (dummy data)
+                const sitemapStatus = document.getElementById('sitemap-status');
+                if (sitemapStatus) {
+                    sitemapStatus.textContent = "上次檢查時間：2024-07-30 10:00 - 發現 150 個有效頁面。";
+                }
+                 // Example: Populate DB status (dummy data)
+                const dbSyncStatus = document.getElementById('db-sync-status');
+                if (dbSyncStatus) {
+                    dbSyncStatus.textContent = "上次同步時間：2024-07-30 11:00 - 同步 50 筆新病歷。";
+                }
+            }
+
+            // Initial load of sync statuses
+            loadSyncStatus();
+
+            async function loadSyncLog() {
+                const syncLogTableBody = document.querySelector(".table-container table tbody");
+                if (!syncLogTableBody) {
+                    console.error("Sync log table body not found!");
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${apiBaseUrl}/knowledgebase/sync-log`);
+                    if (!response.ok) {
+                        console.error("Failed to load sync log:", response.status, await response.text());
+                        syncLogTableBody.innerHTML = '<tr><td colspan="4" style="color:red;">無法載入同步日誌。</td></tr>';
+                        return;
+                    }
+                    const data = await response.json();
+                    const logs = data.logs;
+
+                    syncLogTableBody.innerHTML = ''; // Clear existing mock data or old logs
+
+                    if (logs && logs.length > 0) {
+                        logs.forEach(log => {
+                            const row = syncLogTableBody.insertRow();
+                            const cellTimestamp = row.insertCell();
+                            const cellSource = row.insertCell();
+                            const cellStatus = row.insertCell();
+                            const cellMessage = row.insertCell();
+
+                            cellTimestamp.textContent = new Date(log.timestamp).toLocaleString();
+                            cellSource.textContent = `${log.source_name} (${log.operation_type})`;
+                            cellStatus.textContent = log.status;
+                            cellMessage.textContent = log.message;
+
+                            // Optional: Add styling based on status
+                            if (log.status.toLowerCase().includes('error')) {
+                                cellStatus.style.color = 'red';
+                            } else if (log.status.toLowerCase().includes('success')) {
+                                cellStatus.style.color = 'green';
+                            } else if (log.status.toLowerCase().includes('started') || log.status.toLowerCase().includes('pending')) {
+                                cellStatus.style.color = 'orange';
+                            }
+                        });
+                    } else {
+                        syncLogTableBody.innerHTML = '<tr><td colspan="4">目前沒有同步日誌記錄。</td></tr>';
+                    }
+                } catch (error) {
+                    console.error('載入同步日誌 API 錯誤:', error);
+                    syncLogTableBody.innerHTML = '<tr><td colspan="4" style="color:red;">載入同步日誌時發生客戶端錯誤。</td></tr>';
+                }
+            }
+        });
+    </script>
+</body>
+</html> 

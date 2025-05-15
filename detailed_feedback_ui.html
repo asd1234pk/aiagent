@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>提供詳細回饋 - AI 醫療諮詢助理</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <!-- <img src="images/logo_placeholder.png" alt="醫院 Logo"> -->
+            <h1>AI 醫療諮詢助理 - 詳細回饋</h1>
+        </div>
+        <nav>
+            <a href="assistant_ui.html">返回助理介面</a>
+            <a href="admin_dashboard.html" class="admin-link">管理主控台</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <h2>提供詳細回饋</h2>
+            <form id="detailed-feedback-form" class="feedback-form">
+                <div class="form-group">
+                    <label for="original-question">相關問題：</label>
+                    <p id="original-question-text" class="context-display">讀取中...</p>
+                </div>
+                <div class="form-group">
+                    <label for="ai-answer">AI 回答內容：</label>
+                    <p id="ai-answer-text" class="context-display">讀取中...</p>
+                </div>
+                
+                <div class="form-group">
+                    <label for="feedback-type">回饋類型：</label>
+                    <select id="feedback-type" name="feedback-type">
+                        <option value="suggestion">改進建議</option>
+                        <option value="correction">內容錯誤</option>
+                        <option value="missing_info">資訊不足</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="feedback-details">詳細說明：</label>
+                    <textarea id="feedback-details" name="feedback-details" rows="8" required placeholder="請詳細描述您的回饋，例如：\n- 哪個部分不正確？\n- 應該如何修正？\n- 是否有遺漏的重要資訊？"></textarea>
+                </div>
+
+                <div class="form-group form-actions">
+                    <button type="submit" class="button button-primary">提交回饋</button>
+                    <a href="assistant_ui.html" class="button button-secondary">取消</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <footer>
+        <p class="footer-text">&copy; 2024 您的醫院名稱. All Rights Reserved.</p>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const originalQuestionTextElement = document.getElementById('original-question-text');
+            const aiAnswerTextElement = document.getElementById('ai-answer-text');
+            const feedbackForm = document.getElementById('detailed-feedback-form');
+            const feedbackDetailsTextarea = document.getElementById('feedback-details');
+            const feedbackTypeSelect = document.getElementById('feedback-type');
+
+            const storedQuestion = localStorage.getItem('questionForFeedback') || '未提供問題';
+            const storedAnswer = localStorage.getItem('answerForFeedback') || '未提供回答內容';
+
+            if (originalQuestionTextElement) {
+                originalQuestionTextElement.textContent = storedQuestion;
+            }
+            if (aiAnswerTextElement) {
+                aiAnswerTextElement.textContent = storedAnswer;
+            }
+
+            if (feedbackForm) {
+                feedbackForm.addEventListener('submit', async function(event) {
+                    event.preventDefault();
+                    
+                    const details = feedbackDetailsTextarea.value.trim();
+                    const feedbackType = feedbackTypeSelect.value;
+
+                    if (!details) {
+                        alert('請填寫詳細說明。');
+                        feedbackDetailsTextarea.focus();
+                        return;
+                    }
+
+                    // Use the same submitFeedbackToServer logic or adapt it here
+                    console.log(`提交詳細回饋: 問題="${storedQuestion}", 回答="${storedAnswer}", 類型=${feedbackType}, 細節=${details}`);
+                    
+                    try {
+                        const response = await fetch('http://127.0.0.1:8000/api/feedback', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                question: storedQuestion,
+                                answer: storedAnswer,
+                                feedback_type: feedbackType, // This is the detailed feedback category
+                                details: details
+                            }),
+                        });
+                        const result = await response.json();
+                        if (response.ok) {
+                            alert(`感謝您的詳細回饋 (ID: ${result.feedback_id})！將返回助理介面。`);
+                            localStorage.removeItem('questionForFeedback'); // Clean up
+                            localStorage.removeItem('answerForFeedback');
+                            window.location.href = 'assistant_ui.html';
+                        } else {
+                            alert(`提交回饋失敗: ${result.detail || '未知錯誤'}`);
+                        }
+                    } catch (error) {
+                        console.error('提交詳細回饋 API 錯誤:', error);
+                        alert('提交回饋時發生連接錯誤。');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html> 

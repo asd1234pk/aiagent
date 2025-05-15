@@ -1,0 +1,25 @@
+[
+    {
+        "id": "fb_example_001",
+        "timestamp": "2024-07-28T10:30:00Z",
+        "question": "請問五十肩的治療方式有哪些？",
+        "answer": "五十肩的治療方式包含：1. 物理治療，例如關節鬆動術、治療性運動。2. 藥物治療，例如口服非類固醇消炎止痛藥。3. 局部注射治療，例如類固醇注射。4. 在某些情況下，可能會考慮手術治療，例如關節鏡手術。",
+        "feedback_type": "incorrect",
+        "details": "回答中沒有提到最新的治療方式，例如擴張術。",
+        "session_id": "session_abc_123",
+        "status": "pending_review",
+        "admin_notes": ""
+    },
+    {
+        "id": "fb_example_002",
+        "timestamp": "2024-07-29T14:15:00Z",
+        "question": "跑步膝蓋外側痛怎麼辦？",
+        "answer": "跑步造成的膝蓋外側疼痛，常見的原因是髂脛束摩擦症候群。建議先休息、冰敷，並尋求專業醫師或物理治療師評估，以獲得正確的診斷與治療計畫。",
+        "feedback_type": "helpful",
+        "details": "這個回答很有幫助，點出了可能的原因並建議就醫。",
+        "session_id": "session_xyz_789",
+        "status": "action_taken",
+        "admin_notes": "使用者認為有幫助，可列為正面範例。",
+        "last_updated_by_admin_at": "2025-05-15T03:32:50.653481"
+    }
+]

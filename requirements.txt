@@ -1,0 +1,9 @@
+python-docx
+requests
+beautifulsoup4
+mysql-connector-python
+openai>=1.0.0
+faiss-cpu
+numpy # faiss 需要 numpy
+fastapi
+uvicorn[standard] # for running the FastAPI app 

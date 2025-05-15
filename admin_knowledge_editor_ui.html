@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>知識庫編輯 - 知識庫管理</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <!-- <img src="images/logo_placeholder.png" alt="醫院 Logo"> -->
+            <h1>知識庫管理 - 知識編輯</h1>
+        </div>
+        <nav>
+            <a href="admin_dashboard.html">返回管理主控台</a>
+            <a href="index.html">返回入口</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <div class="main-content">
+            <h2>手動知識庫編輯</h2>
+            
+            <div class="card">
+                <div class="card-header">新增知識條目 (Q&A)</div>
+                <form id="addKnowledgeForm">
+                    <div class="form-group">
+                        <label for="question">問題：</label>
+                        <input type="text" id="question" name="question" placeholder="例如：民眾詢問XX科夜間門診時間？" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="answer">標準答案/指引：</label>
+                        <textarea id="answer" name="answer" placeholder="請提供詳細且準確的回答或處理指引。" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="keywords">相關關鍵字（選填，用逗號分隔）：</label>
+                        <input type="text" id="keywords" name="keywords" placeholder="例如：夜診, XX科, 掛號時間">
+                    </div>
+                    <button type="submit" class="button button-success">新增至知識庫</button>
+                </form>
+            </div>
+
+            <h3>現有知識條目管理</h3>
+            <div class="form-group">
+                <input type="text" id="searchKnowledge" placeholder="搜尋現有問題或答案關鍵字...">
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>問題</th>
+                            <th>答案 (摘要)</th>
+                            <th>關鍵字</th>
+                            <th>最後修改時間</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="knowledgeTableBody">
+                        <tr>
+                            <td>本院停車場收費標準？</td>
+                            <td>汽車每小時50元，機車每次20元...</td>
+                            <td>停車, 收費, 費用</td>
+                            <td>2024-07-15 11:00</td>
+                            <td>
+                                <button class="button button-small">編輯</button>
+                                <button class="button button-danger button-small">刪除</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>如何申請病歷摘要？</td>
+                            <td>請攜帶身分證件至一樓櫃台辦理...</td>
+                            <td>病歷, 申請, 摘要, 證明</td>
+                            <td>2024-07-10 16:30</td>
+                            <td>
+                                <button class="button button-small">編輯</button>
+                                <button class="button button-danger button-small">刪除</button>
+                            </td>
+                        </tr>
+                        <!-- More knowledge items -->
+                    </tbody>
+                </table>
+            </div>
+            <p style="text-align: right; margin-top: 10px;"><small><em>「編輯」按鈕應載入條目內容至上方表單或彈出編輯框。「刪除」需有確認提示。</em></small></p>
+
+        </div>
+    </div>
+
+    <footer>
+        <p class="footer-text">&copy; 2024 您的醫院名稱. All Rights Reserved.</p>
+    </footer>
+    <script>
+        // Placeholder for form submission and table interactions
+        // document.getElementById('addKnowledgeForm').addEventListener('submit', function(e){
+        //     e.preventDefault();
+        //     alert('知識條目已新增！(此為原型演示)');
+        //     // Add logic to actually add to table or send to backend
+        // });
+    </script>
+</body>
+</html> 
