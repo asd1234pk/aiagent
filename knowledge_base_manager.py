@@ -661,7 +661,8 @@ if __name__ == '__main__':
                             print(f"    標題: {res['title']}")
                             print(f"    來源: {res['source']}")
                             print(f"    分數 (L2距離): {res['score']:.4f}") # 距離越小越相關
-                            print(f"    文本片段: {res['text'][:150].replace('\n', ' ')}...")
+                            text_snippet = res['text'][:150].replace('\n', ' ')
+                            print(f"    文本片段: {text_snippet}...")
                     else:
                         print("  未找到相關結果。")
             else:
