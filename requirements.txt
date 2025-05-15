@@ -7,3 +7,6 @@ faiss-cpu
 numpy # faiss 需要 numpy
 fastapi
 uvicorn[standard] # for running the FastAPI app 
+python-dotenv
+sitemap_parser
+python-multipart 
