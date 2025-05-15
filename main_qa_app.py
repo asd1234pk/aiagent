@@ -9,13 +9,14 @@ It also exposes an API endpoint using FastAPI.
 import os
 from openai import OpenAI
 from knowledge_base_manager import KnowledgeBaseManager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, File, UploadFile
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 import json
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
+import shutil # For saving uploaded files
 
 # --- Configuration ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -25,6 +26,10 @@ if not OPENAI_API_KEY:
 LLM_MODEL = "gpt-4o" # Default LLM model, can also be part of prompt_settings.json if desired
 FEEDBACK_FILE = "feedbacks.json"
 PROMPT_SETTINGS_FILE = "prompt_settings.json" # Define the prompt settings file
+
+# Directory for Word documents, ensure it exists
+WORD_DOCS_DIR = os.path.join("knowledge_docs", "word_documents")
+os.makedirs(WORD_DOCS_DIR, exist_ok=True)
 
 # Default prompt settings (if file is missing or invalid)
 DEFAULT_SYSTEM_MESSAGE = "您是一個基礎的 AI 助理。請根據上下文回答問題。"
@@ -110,6 +115,22 @@ class FeedbackItem(FeedbackRequest): # Inherits fields from FeedbackRequest for 
 class FeedbackUpdateRequest(BaseModel):
     status: Optional[str] = None
     admin_notes: Optional[str] = None
+
+# --- Pydantic Models for Word Document Management ---
+class WordDocumentItem(BaseModel):
+    name: str
+    size: int # in bytes
+    modified_at: str # ISO format timestamp
+
+class FileUploadResponse(BaseModel):
+    filename: str
+    message: str
+    path: Optional[str] = None
+
+class FileDeleteResponse(BaseModel):
+    filename: str
+    message: str
+# --- End Pydantic Models for Word Document Management ---
 
 class MedicalAssistantApp:
     def __init__(self, knowledge_base_dir="vector_store"):
@@ -633,6 +654,75 @@ async def get_sync_log():
             print(f"Error reading {sync_log_file_path}: {e}. Returning empty log.")
             # Optionally raise HTTPException
     return SyncLogResponse(logs=logs_to_return)
+
+# --- API Endpoints for Word Document Management ---
+@app.post("/api/admin/knowledgebase/word-documents/upload", response_model=FileUploadResponse)
+async def upload_word_document(file: UploadFile = File(...), overwrite: bool = False):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided.")
+    
+    if not file.filename.endswith(".docx"):
+        raise HTTPException(status_code=400, detail="Invalid file type. Only .docx files are allowed.")
+
+    file_path = os.path.join(WORD_DOCS_DIR, file.filename)
+    
+    if os.path.exists(file_path) and not overwrite:
+        raise HTTPException(status_code=409, detail=f"File '{file.filename}' already exists. Set overwrite=true to replace it.")
+
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not save file: {e}")
+    finally:
+        await file.close() # Ensure the file is closed
+
+    return FileUploadResponse(
+        filename=file.filename, 
+        message=f"File '{file.filename}' uploaded successfully.",
+        path=file_path
+    )
+
+@app.get("/api/admin/knowledgebase/word-documents", response_model=List[WordDocumentItem])
+async def list_word_documents():
+    docs = []
+    if not os.path.exists(WORD_DOCS_DIR):
+        # This should not happen if os.makedirs runs at startup, but as a safeguard:
+        return [] 
+        
+    for filename in os.listdir(WORD_DOCS_DIR):
+        if filename.endswith(".docx"):
+            file_path = os.path.join(WORD_DOCS_DIR, filename)
+            try:
+                stat_result = os.stat(file_path)
+                docs.append(WordDocumentItem(
+                    name=filename,
+                    size=stat_result.st_size,
+                    modified_at=datetime.fromtimestamp(stat_result.st_mtime).isoformat()
+                ))
+            except Exception as e:
+                print(f"Error stating file {filename}: {e}") # Log error and skip file
+    return docs
+
+@app.delete("/api/admin/knowledgebase/word-documents/{filename}", response_model=FileDeleteResponse)
+async def delete_word_document(filename: str):
+    if not filename.endswith(".docx"):
+        # Be strict, or just sanitize the filename if preferred
+        raise HTTPException(status_code=400, detail="Invalid filename or not a .docx file.")
+
+    file_path = os.path.join(WORD_DOCS_DIR, filename) 
+    # Basic protection against path traversal by ensuring filename is just a name not a path
+    if os.path.basename(file_path) != filename:
+        raise HTTPException(status_code=400, detail="Invalid filename.")
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
+
+    try:
+        os.remove(file_path)
+        return FileDeleteResponse(filename=filename, message=f"File '{filename}' deleted successfully.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not delete file: {e}")
 
 # --- Main execution for testing (commented out for FastAPI) ---
 # if __name__ == '__main__':

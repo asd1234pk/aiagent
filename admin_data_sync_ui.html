@@ -49,6 +49,36 @@
                     <p style="margin-top:10px;"><small><em>此操作將會掃描指定目錄中的 Word 文件，進行處理並更新至向量資料庫。</em></small></p>
                 </div>
 
+                <!-- New Section for Word Document Management -->
+                <div class="card">
+                    <div class="card-header">手動管理 Word 文件</div>
+                    <div class="form-group">
+                        <label for="wordFileUpload">上傳新的 Word 文件 (.docx)：</label>
+                        <input type="file" id="wordFileUpload" accept=".docx" style="margin-bottom: 10px;">
+                        <button id="uploadWordFileButton" class="button button-primary">上傳檔案</button>
+                    </div>
+                    <div id="word-file-upload-status" class="status-message" style="margin-top:10px;"></div>
+                    
+                    <h4>目前知識庫中的 Word 文件：</h4>
+                    <div id="word-file-list-status" class="status-message"></div>
+                    <div class="table-container" style="margin-top:10px;">
+                        <table id="wordFilesTable">
+                            <thead>
+                                <tr>
+                                    <th>檔案名稱</th>
+                                    <th>大小</th>
+                                    <th>最後修改時間</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="wordFilesTableBody">
+                                <!-- File list will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- End New Section -->
+
                 <div class="card">
                     <div class="card-header">醫院官方網站內容</div>
                     <p>目標網址：<span id="websiteUrl">https://yourhospital.example.com/articles/</span></p>
@@ -143,6 +173,14 @@
             const localWordLastSyncSpan = document.getElementById('localWordLastSync');
             const localWordSyncStatusSpan = document.getElementById('localWordSyncStatus');
             const localWordDocCountSpan = document.getElementById('localWordDocCount');
+
+            // New Elements for Word Document Management
+            const wordFileUploadInput = document.getElementById('wordFileUpload');
+            const uploadWordFileButton = document.getElementById('uploadWordFileButton');
+            const wordFilesTableBody = document.getElementById('wordFilesTableBody');
+            const wordFileUploadStatusDiv = document.getElementById('word-file-upload-status');
+            const wordFileListStatusDiv = document.getElementById('word-file-list-status');
+            let currentWordFiles = []; // To store the list of current files for checking duplicates
 
             async function loadKnowledgeBaseSummaryStatus() {
                 if (kbSummaryStatusDiv) {
@@ -425,6 +463,143 @@
                     syncLogTableBody.innerHTML = '<tr><td colspan="4" style="color:red;">載入同步日誌時發生客戶端錯誤。</td></tr>';
                 }
             }
+
+            // --- Word Document Management Functions ---
+            function showFileUploadStatus(message, isError = false) {
+                wordFileUploadStatusDiv.textContent = message;
+                wordFileUploadStatusDiv.className = 'status-message';
+                if (isError) wordFileUploadStatusDiv.classList.add('error');
+                else wordFileUploadStatusDiv.classList.add('success');
+                wordFileUploadStatusDiv.style.display = 'block';
+                setTimeout(() => { wordFileUploadStatusDiv.style.display = 'none'; }, 5000);
+            }
+
+            function showFileListStatus(message, isError = false) {
+                wordFileListStatusDiv.textContent = message;
+                wordFileListStatusDiv.className = 'status-message';
+                if (isError) wordFileListStatusDiv.classList.add('error');
+                else wordFileListStatusDiv.classList.add('success');
+                wordFileListStatusDiv.style.display = 'block';
+                setTimeout(() => { wordFileListStatusDiv.style.display = 'none'; }, 3000);
+            }
+
+            async function loadWordFiles() {
+                showFileListStatus('正在載入 Word 文件列表...');
+                try {
+                    const response = await fetch(`${apiBaseUrl}/knowledgebase/word-documents`);
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+                        throw new Error(`載入檔案列表失敗: ${response.status} ${errorData.detail}`);
+                    }
+                    const files = await response.json();
+                    currentWordFiles = files.map(f => f.name);
+                    renderWordFilesTable(files);
+                    if (files.length === 0) {
+                        showFileListStatus('目前沒有手動上傳的 Word 文件。');
+                    } else {
+                        showFileListStatus('Word 文件列表已載入。');
+                    }
+                } catch (error) {
+                    console.error('載入 Word 檔案列表錯誤:', error);
+                    showFileListStatus(error.message, true);
+                    wordFilesTableBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:red;">無法載入文件列表: ${error.message}</td></tr>`;
+                }
+            }
+
+            function renderWordFilesTable(files) {
+                wordFilesTableBody.innerHTML = ''; // Clear existing rows
+                if (!files || files.length === 0) {
+                    wordFilesTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">沒有找到 Word 文件。</td></tr>';
+                    return;
+                }
+                files.forEach(file => {
+                    const row = wordFilesTableBody.insertRow();
+                    row.insertCell().textContent = file.name;
+                    row.insertCell().textContent = `${(file.size / 1024).toFixed(2)} KB`;
+                    row.insertCell().textContent = new Date(file.modified_at).toLocaleString();
+                    
+                    const deleteButton = document.createElement('button');
+                    deleteButton.textContent = '刪除';
+                    deleteButton.classList.add('button', 'button-danger', 'button-small');
+                    deleteButton.onclick = () => handleDeleteWordFile(file.name);
+                    row.insertCell().appendChild(deleteButton);
+                });
+            }
+
+            async function handleDeleteWordFile(filename) {
+                if (!confirm(`您確定要刪除檔案 '${filename}' 嗎？此操作無法復原。`)) {
+                    return;
+                }
+                showFileUploadStatus(`正在刪除檔案 '${filename}'`);
+                try {
+                    const response = await fetch(`${apiBaseUrl}/knowledgebase/word-documents/${filename}`, {
+                        method: 'DELETE'
+                    });
+                    const result = await response.json();
+                    if (!response.ok) {
+                        throw new Error(result.detail || `刪除失敗: ${response.status}`);
+                    }
+                    showFileUploadStatus(result.message || `檔案 '${filename}' 已成功刪除`);
+                    loadWordFiles(); // Refresh the list
+                } catch (error) {
+                    console.error('刪除 Word 檔案錯誤:', error);
+                    showFileUploadStatus(error.message, true);
+                }
+            }
+
+            if (uploadWordFileButton) {
+                uploadWordFileButton.addEventListener('click', async () => {
+                    const fileInput = wordFileUploadInput;
+                    if (!fileInput.files || fileInput.files.length === 0) {
+                        showFileUploadStatus('請先選擇一個 .docx 檔案。', true);
+                        return;
+                    }
+                    const file = fileInput.files[0];
+                    if (!file.name.endsWith('.docx')) {
+                        showFileUploadStatus('檔案類型錯誤，僅支援 .docx 格式。', true);
+                        return;
+                    }
+
+                    let overwrite = false;
+                    if (currentWordFiles.includes(file.name)) {
+                        if (!confirm(`檔案 '${file.name}' 已存在於知識庫中。您想要覆蓋它嗎？`)) {
+                            showFileUploadStatus('上傳已取消。');
+                            fileInput.value = ''; // Reset file input
+                            return;
+                        }
+                        overwrite = true;
+                    }
+
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    showFileUploadStatus(`正在上傳檔案 '${file.name}' ...`);
+                    try {
+                        const response = await fetch(`${apiBaseUrl}/knowledgebase/word-documents/upload?overwrite=${overwrite}`, {
+                            method: 'POST',
+                            body: formData
+                            // 'Content-Type': 'multipart/form-data' is set automatically by browser for FormData
+                        });
+                        const result = await response.json();
+                        if (!response.ok) {
+                            throw new Error(result.detail || `上傳失敗: ${response.status}`);
+                        }
+                        showFileUploadStatus(result.message || `檔案 '${file.name}' 已成功上傳`);
+                        fileInput.value = ''; // Reset file input
+                        loadWordFiles(); // Refresh the list
+                    } catch (error) {
+                        console.error('上傳 Word 檔案錯誤:', error);
+                        showFileUploadStatus(error.message, true);
+                    }
+                });
+            }
+
+            // --- End Word Document Management Functions ---
+
+            // Initial loads
+            loadKnowledgeBaseSummaryStatus();
+            loadSyncLog(); // Assuming loadSyncLog() is defined elsewhere or will be defined
+            loadWordFiles(); // Load Word files on page load
         });
     </script>
 </body>
