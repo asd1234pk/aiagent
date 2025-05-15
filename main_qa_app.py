@@ -27,9 +27,12 @@ LLM_MODEL = "gpt-4o" # Default LLM model, can also be part of prompt_settings.js
 FEEDBACK_FILE = "feedbacks.json"
 PROMPT_SETTINGS_FILE = "prompt_settings.json" # Define the prompt settings file
 
-# Directory for Word documents, ensure it exists
-WORD_DOCS_DIR = os.path.join("knowledge_docs", "word_documents")
-os.makedirs(WORD_DOCS_DIR, exist_ok=True)
+# Base directory for all knowledge documents
+KNOWLEDGE_DOCS_BASE_DIR = "knowledge_docs"
+# Directory for Word documents uploaded via UI (can be a subdirectory of KNOWLEDGE_DOCS_BASE_DIR)
+WORD_DOCS_UPLOAD_DIR = os.path.join(KNOWLEDGE_DOCS_BASE_DIR, "word_documents")
+os.makedirs(KNOWLEDGE_DOCS_BASE_DIR, exist_ok=True)
+os.makedirs(WORD_DOCS_UPLOAD_DIR, exist_ok=True)
 
 # Default prompt settings (if file is missing or invalid)
 DEFAULT_SYSTEM_MESSAGE = "您是一個基礎的 AI 助理。請根據上下文回答問題。"
@@ -121,6 +124,17 @@ class WordDocumentItem(BaseModel):
     name: str
     size: int # in bytes
     modified_at: str # ISO format timestamp
+    path: str # Relative path from KNOWLEDGE_DOCS_BASE_DIR
+    type: str = "file" # To distinguish from folders
+
+class FolderItem(BaseModel):
+    name: str
+    path: str # Relative path from KNOWLEDGE_DOCS_BASE_DIR
+    type: str = "folder"
+    children: List[Union['FolderItem', WordDocumentItem]] = []
+
+# Update List Response Type
+WordDocumentListResponse = List[Union[FolderItem, WordDocumentItem]]
 
 class FileUploadResponse(BaseModel):
     filename: str
@@ -664,7 +678,8 @@ async def upload_word_document(file: UploadFile = File(...), overwrite: bool = F
     if not file.filename.endswith(".docx"):
         raise HTTPException(status_code=400, detail="Invalid file type. Only .docx files are allowed.")
 
-    file_path = os.path.join(WORD_DOCS_DIR, file.filename)
+    # Files uploaded via this UI endpoint go to WORD_DOCS_UPLOAD_DIR
+    file_path = os.path.join(WORD_DOCS_UPLOAD_DIR, file.filename)
     
     if os.path.exists(file_path) and not overwrite:
         raise HTTPException(status_code=409, detail=f"File '{file.filename}' already exists. Set overwrite=true to replace it.")
@@ -680,49 +695,85 @@ async def upload_word_document(file: UploadFile = File(...), overwrite: bool = F
     return FileUploadResponse(
         filename=file.filename, 
         message=f"File '{file.filename}' uploaded successfully.",
-        path=file_path
+        path=file_path # This path is absolute, might want to return relative for consistency if needed by UI
     )
 
-@app.get("/api/admin/knowledgebase/word-documents", response_model=List[WordDocumentItem])
-async def list_word_documents():
-    docs = []
-    if not os.path.exists(WORD_DOCS_DIR):
-        # This should not happen if os.makedirs runs at startup, but as a safeguard:
-        return [] 
-        
-    for filename in os.listdir(WORD_DOCS_DIR):
-        if filename.endswith(".docx"):
-            file_path = os.path.join(WORD_DOCS_DIR, filename)
-            try:
-                stat_result = os.stat(file_path)
-                docs.append(WordDocumentItem(
-                    name=filename,
-                    size=stat_result.st_size,
-                    modified_at=datetime.fromtimestamp(stat_result.st_mtime).isoformat()
-                ))
-            except Exception as e:
-                print(f"Error stating file {filename}: {e}") # Log error and skip file
-    return docs
+@app.get("/api/admin/knowledgebase/word-documents", response_model=WordDocumentListResponse)
+async def list_word_documents(): # Renamed from list_word_documents to reflect broader scope
+    
+    def get_dir_contents(dir_path: str, relative_base: str) -> List[Union[FolderItem, WordDocumentItem]]:
+        items = []
+        try:
+            for entry_name in sorted(os.listdir(dir_path)):
+                full_path = os.path.join(dir_path, entry_name)
+                # Path relative to KNOWLEDGE_DOCS_BASE_DIR
+                relative_item_path = os.path.join(relative_base, entry_name).replace("\\", "/") 
 
-@app.delete("/api/admin/knowledgebase/word-documents/{filename}", response_model=FileDeleteResponse)
-async def delete_word_document(filename: str):
-    if not filename.endswith(".docx"):
-        # Be strict, or just sanitize the filename if preferred
-        raise HTTPException(status_code=400, detail="Invalid filename or not a .docx file.")
+                if os.path.isdir(full_path):
+                    items.append(FolderItem(
+                        name=entry_name,
+                        path=relative_item_path,
+                        children=get_dir_contents(full_path, relative_item_path) # Recursive call
+                    ))
+                elif os.path.isfile(full_path) and entry_name.endswith(".docx"):
+                    try:
+                        stat_result = os.stat(full_path)
+                        items.append(WordDocumentItem(
+                            name=entry_name,
+                            size=stat_result.st_size,
+                            modified_at=datetime.fromtimestamp(stat_result.st_mtime).isoformat(),
+                            path=relative_item_path
+                        ))
+                    except Exception as e:
+                        print(f"Error stating file {entry_name} at {full_path}: {e}")
+        except FileNotFoundError:
+            print(f"Directory not found: {dir_path}")
+            # This might happen if a KNOWLEDGE_DOCS_BASE_DIR doesn't exist, 
+            # though we try to create it at startup.
+            return [] # Return empty list for this path
+        except Exception as e:
+            print(f"Error listing directory {dir_path}: {e}")
+            # Consider raising an HTTPException for unexpected errors
+            return []
+        return items
 
-    file_path = os.path.join(WORD_DOCS_DIR, filename) 
-    # Basic protection against path traversal by ensuring filename is just a name not a path
-    if os.path.basename(file_path) != filename:
-        raise HTTPException(status_code=400, detail="Invalid filename.")
+    if not os.path.exists(KNOWLEDGE_DOCS_BASE_DIR):
+        # Safeguard, though os.makedirs is called at startup
+        return []
+    
+    return get_dir_contents(KNOWLEDGE_DOCS_BASE_DIR, "")
 
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
+@app.delete("/api/admin/knowledgebase/word-documents/{filepath:path}", response_model=FileDeleteResponse)
+async def delete_word_document(filepath: str):
+    # Filepath is expected to be relative to KNOWLEDGE_DOCS_BASE_DIR
+    # Sanitize/validate filepath to prevent going outside KNOWLEDGE_DOCS_BASE_DIR
+    
+    # Normalize the path (e.g., convert forward slashes if needed, though FastAPI handles this well)
+    # filepath = os.path.normpath(filepath)
+
+    # Construct the full, absolute path
+    # IMPORTANT: Ensure KNOWLEDGE_DOCS_BASE_DIR is an absolute path or resolved correctly
+    # For safety, resolve KNOWLEDGE_DOCS_BASE_DIR to an absolute path first if it's relative
+    base_dir_abs = os.path.abspath(KNOWLEDGE_DOCS_BASE_DIR)
+    target_file_abs = os.path.abspath(os.path.join(base_dir_abs, filepath))
+
+    # Security check: Ensure the resolved path is still within the base directory
+    if not target_file_abs.startswith(base_dir_abs):
+        raise HTTPException(status_code=400, detail="Invalid filepath (path traversal attempt detected).")
+
+    # Further check that it's a .docx file we are deleting
+    if not target_file_abs.endswith(".docx"):
+        raise HTTPException(status_code=400, detail="Invalid file type. Deletion only allowed for .docx files.")
+
+    if not os.path.exists(target_file_abs) or not os.path.isfile(target_file_abs):
+        raise HTTPException(status_code=404, detail=f"File '{filepath}' not found.")
 
     try:
-        os.remove(file_path)
-        return FileDeleteResponse(filename=filename, message=f"File '{filename}' deleted successfully.")
+        os.remove(target_file_abs)
+        # Use the original relative filepath for the response filename for consistency with UI
+        return FileDeleteResponse(filename=filepath, message=f"File '{filepath}' deleted successfully.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Could not delete file: {e}")
+        raise HTTPException(status_code=500, detail=f"Could not delete file '{filepath}': {e}")
 
 # --- Main execution for testing (commented out for FastAPI) ---
 # if __name__ == '__main__':

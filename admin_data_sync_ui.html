@@ -150,6 +150,8 @@
             const wordFilesTableBody = document.getElementById('wordFilesTableBody');
             const wordFileUploadStatusDiv = document.getElementById('word-file-upload-status');
             const wordFileListStatusDiv = document.getElementById('word-file-list-status');
+            const WORD_DOCS_UPLOAD_DIR_DISPLAY = "knowledge_docs/word_documents"; // For display purposes
+
             let currentWordFiles = []; // To store the list of current files for checking duplicates
 
             async function loadKnowledgeBaseSummaryStatus() {
@@ -449,11 +451,12 @@
                         const errorData = await response.json().catch(() => ({ detail: response.statusText }));
                         throw new Error(`載入檔案列表失敗: ${response.status} ${errorData.detail}`);
                     }
-                    const files = await response.json();
-                    currentWordFiles = files.map(f => f.name);
-                    renderWordFilesTable(files);
-                    if (files.length === 0) {
-                        showFileListStatus('目前沒有手動上傳的 Word 文件。');
+                    const fileTree = await response.json();
+                    renderWordFilesTree(fileTree, wordFilesTableBody, 0); // Initial call with level 0
+                    
+                    if (fileTree.length === 0) {
+                        showFileListStatus('知識庫中目前沒有 Word 文件或資料夾。');
+                        wordFilesTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">知識庫中目前沒有 Word 文件或資料夾。</td></tr>';
                     } else {
                         showFileListStatus('Word 文件列表已載入。');
                     }
@@ -464,40 +467,66 @@
                 }
             }
 
-            function renderWordFilesTable(files) {
-                wordFilesTableBody.innerHTML = ''; // Clear existing rows
-                if (!files || files.length === 0) {
-                    wordFilesTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">沒有找到 Word 文件。</td></tr>';
-                    return;
+            function renderWordFilesTree(items, parentElement, level) {
+                if (level === 0) { // Clear only on the first call for the root
+                    parentElement.innerHTML = ''; 
                 }
-                files.forEach(file => {
-                    const row = wordFilesTableBody.insertRow();
-                    row.insertCell().textContent = file.name;
-                    row.insertCell().textContent = `${(file.size / 1024).toFixed(2)} KB`;
-                    row.insertCell().textContent = new Date(file.modified_at).toLocaleString();
-                    
-                    const deleteButton = document.createElement('button');
-                    deleteButton.textContent = '刪除';
-                    deleteButton.classList.add('button', 'button-danger', 'button-small');
-                    deleteButton.onclick = () => handleDeleteWordFile(file.name);
-                    row.insertCell().appendChild(deleteButton);
+
+                items.forEach(item => {
+                    const row = parentElement.insertRow();
+                    const nameCell = row.insertCell();
+                    nameCell.style.paddingLeft = `${level * 20}px`; // Indentation for tree view
+
+                    if (item.type === 'folder') {
+                        nameCell.innerHTML = `<strong>📁 ${item.name}</strong> (資料夾)`;
+                        row.insertCell().textContent = '-'; // Size for folder
+                        row.insertCell().textContent = '-'; // Modified date for folder
+                        row.insertCell(); // Empty cell for actions on folder (can add e.g. expand/collapse later)
+                        
+                        if (item.children && item.children.length > 0) {
+                            // Recursively render children. For a table, this means adding more rows under this one.
+                            // A true tree table might require more complex row spanning or a different HTML structure (e.g., nested ULs).
+                            // For simplicity here, we'll just list them sequentially with indentation.
+                            renderWordFilesTree(item.children, parentElement, level + 1);
+                        }
+                    } else if (item.type === 'file') {
+                        nameCell.textContent = `📄 ${item.name}`;
+                        row.insertCell().textContent = `${(item.size / 1024).toFixed(2)} KB`;
+                        row.insertCell().textContent = new Date(item.modified_at).toLocaleString();
+                        
+                        const deleteButton = document.createElement('button');
+                        deleteButton.textContent = '刪除';
+                        deleteButton.classList.add('button', 'button-danger', 'button-small');
+                        // Pass the full relative path for deletion
+                        deleteButton.onclick = () => handleDeleteWordFile(item.path); 
+                        row.insertCell().appendChild(deleteButton);
+                    }
                 });
+                 // If it's the initial call and no items were rendered (empty root), display a message.
+                if (level === 0 && parentElement.rows.length === 0 && items.length > 0) {
+                    // This case should ideally be handled by the check in loadWordFiles before calling render
+                } else if (level === 0 && items.length === 0) {
+                     // This is handled in loadWordFiles now.
+                     // parentElement.innerHTML = '<tr><td colspan="4" style="text-align:center;">知識庫中目前沒有 Word 文件或資料夾。</td></tr>';
+                }
             }
 
-            async function handleDeleteWordFile(filename) {
-                if (!confirm(`您確定要刪除檔案 '${filename}' 嗎？此操作無法復原。`)) {
+            async function handleDeleteWordFile(filepath) { // filepath is now relative path
+                if (!confirm(`您確定要刪除檔案 '${filepath}' 嗎？此操作無法復原。`)) {
                     return;
                 }
-                showFileUploadStatus(`正在刪除檔案 '${filename}'`);
+                showFileUploadStatus(`正在刪除檔案 '${filepath}'`);
                 try {
-                    const response = await fetch(`${apiBaseUrl}/knowledgebase/word-documents/${filename}`, {
+                    // Encode the filepath component to handle special characters like '/'
+                    const encodedFilepath = encodeURIComponent(filepath);
+                    const response = await fetch(`${apiBaseUrl}/knowledgebase/word-documents/${encodedFilepath}`, {
                         method: 'DELETE'
                     });
                     const result = await response.json();
                     if (!response.ok) {
                         throw new Error(result.detail || `刪除失敗: ${response.status}`);
                     }
-                    showFileUploadStatus(result.message || `檔案 '${filename}' 已成功刪除`);
+                    showFileUploadStatus(result.message || `檔案 '${filepath}' 已成功刪除`);
                     loadWordFiles(); // Refresh the list
                 } catch (error) {
                     console.error('刪除 Word 檔案錯誤:', error);
@@ -520,7 +549,7 @@
 
                     let overwrite = false;
                     if (currentWordFiles.includes(file.name)) {
-                        if (!confirm(`檔案 '${file.name}' 已存在於知識庫中。您想要覆蓋它嗎？`)) {
+                        if (!confirm(`檔案 '${file.name}' 已存在於 '${WORD_DOCS_UPLOAD_DIR_DISPLAY}' 中。您想要覆蓋它嗎？`)) {
                             showFileUploadStatus('上傳已取消。');
                             fileInput.value = ''; // Reset file input
                             return;
