@@ -1,5 +1,145 @@
 [
     {
+        "timestamp": "2025-05-15T14:11:23.883425",
+        "operation_type": "full_rebuild",
+        "source_name": "overall",
+        "status": "success_no_new_embeddings",
+        "message": "知識庫更新完成 (force_rebuild=True, source_filter=all). 總向量數: 0. 狀態: success_no_new_embeddings. 訊息: 已處理的獨立區塊未能成功生成嵌入或沒有新內容需添加。"
+    },
+    {
+        "timestamp": "2025-05-15T14:11:23.873801",
+        "operation_type": "full_rebuild",
+        "source_name": "overall",
+        "status": "success_no_new_embeddings",
+        "message": "已處理的獨立區塊未能成功生成嵌入或沒有新內容需添加。"
+    },
+    {
+        "timestamp": "2025-05-15T14:10:23.785345",
+        "operation_type": "source_processing_word_documents",
+        "source_name": "word_documents",
+        "status": "success_fetched_data",
+        "message": "抓取到 64 個原始區塊。"
+    },
+    {
+        "timestamp": "2025-05-15T14:10:23.693872",
+        "operation_type": "source_processing_website",
+        "source_name": "website",
+        "status": "success_fetched_data",
+        "message": "抓取到 228 個原始區塊。"
+    },
+    {
+        "timestamp": "2025-05-15T14:10:08.014696",
+        "operation_type": "full_rebuild",
+        "source_name": "overall",
+        "status": "started",
+        "message": "知識庫更新開始: force_rebuild=True, source_filter=all"
+    },
+    {
+        "timestamp": "2025-05-15T14:10:01.006703",
+        "operation_type": "full_rebuild",
+        "source_name": "overall",
+        "status": "success_no_new_embeddings",
+        "message": "知識庫更新完成 (force_rebuild=True, source_filter=all). 總向量數: 0. 狀態: success_no_new_embeddings. 訊息: 已處理的獨立區塊未能成功生成嵌入或沒有新內容需添加。"
+    },
+    {
+        "timestamp": "2025-05-15T14:10:00.997317",
+        "operation_type": "full_rebuild",
+        "source_name": "overall",
+        "status": "success_no_new_embeddings",
+        "message": "已處理的獨立區塊未能成功生成嵌入或沒有新內容需添加。"
+    },
+    {
+        "timestamp": "2025-05-15T14:08:59.886125",
+        "operation_type": "source_processing_word_documents",
+        "source_name": "word_documents",
+        "status": "success_fetched_data",
+        "message": "抓取到 64 個原始區塊。"
+    },
+    {
+        "timestamp": "2025-05-15T14:08:59.804207",
+        "operation_type": "source_processing_website",
+        "source_name": "website",
+        "status": "success_fetched_data",
+        "message": "抓取到 228 個原始區塊。"
+    },
+    {
+        "timestamp": "2025-05-15T14:08:44.328698",
+        "operation_type": "full_rebuild",
+        "source_name": "overall",
+        "status": "started",
+        "message": "知識庫更新開始: force_rebuild=True, source_filter=all"
+    },
+    {
+        "timestamp": "2025-05-15T14:01:05.205229",
+        "operation_type": "source_sync_website",
+        "source_name": "website",
+        "status": "success",
+        "message": "來源 [website] 同步成功。影響總向量數：292。"
+    },
+    {
+        "timestamp": "2025-05-15T14:01:05.197004",
+        "operation_type": "source_sync_website",
+        "source_name": "website",
+        "status": "success_no_new_embeddings",
+        "message": "知識庫更新完成 (force_rebuild=False, source_filter=website). 總向量數: 292. 狀態: success_no_new_embeddings. 訊息: 已處理的獨立區塊未能成功生成嵌入或沒有新內容需添加。"
+    },
+    {
+        "timestamp": "2025-05-15T14:01:05.185874",
+        "operation_type": "source_sync_website",
+        "source_name": "website",
+        "status": "success_no_new_embeddings",
+        "message": "已處理的獨立區塊未能成功生成嵌入或沒有新內容需添加。"
+    },
+    {
+        "timestamp": "2025-05-15T14:01:05.164825",
+        "operation_type": "source_processing_website",
+        "source_name": "website",
+        "status": "success_fetched_data",
+        "message": "抓取到 228 個原始區塊。"
+    },
+    {
+        "timestamp": "2025-05-15T14:00:45.393629",
+        "operation_type": "source_sync_website",
+        "source_name": "website",
+        "status": "started",
+        "message": "知識庫更新開始: force_rebuild=False, source_filter=website"
+    },
+    {
+        "timestamp": "2025-05-15T14:00:34.893173",
+        "operation_type": "source_sync_word_documents",
+        "source_name": "word_documents",
+        "status": "success",
+        "message": "來源 [word_documents] 同步成功。影響總向量數：292。"
+    },
+    {
+        "timestamp": "2025-05-15T14:00:34.885127",
+        "operation_type": "source_sync_word_documents",
+        "source_name": "word_documents",
+        "status": "success_no_new_embeddings",
+        "message": "知識庫更新完成 (force_rebuild=False, source_filter=word_documents). 總向量數: 292. 狀態: success_no_new_embeddings. 訊息: 已處理的獨立區塊未能成功生成嵌入或沒有新內容需添加。"
+    },
+    {
+        "timestamp": "2025-05-15T14:00:34.873436",
+        "operation_type": "source_sync_word_documents",
+        "source_name": "word_documents",
+        "status": "success_no_new_embeddings",
+        "message": "已處理的獨立區塊未能成功生成嵌入或沒有新內容需添加。"
+    },
+    {
+        "timestamp": "2025-05-15T14:00:34.859507",
+        "operation_type": "source_processing_word_documents",
+        "source_name": "word_documents",
+        "status": "success_fetched_data",
+        "message": "抓取到 64 個原始區塊。"
+    },
+    {
+        "timestamp": "2025-05-15T14:00:34.773401",
+        "operation_type": "source_sync_word_documents",
+        "source_name": "word_documents",
+        "status": "started",
+        "message": "知識庫更新開始: force_rebuild=False, source_filter=word_documents"
+    },
+    {
         "timestamp": "2025-05-15T11:36:40.105461",
         "operation_type": "full_rebuild",
         "source_name": "overall",

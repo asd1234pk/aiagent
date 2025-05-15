@@ -106,7 +106,7 @@
             const refreshButton = document.getElementById('refresh-feedbacks');
             const globalStatusMessageEl = document.getElementById('status-message-global');
             
-            const API_BASE_URL = 'http://127.0.0.1:8000/api/admin/feedbacks';
+            const API_BASE_URL = '/api/admin/feedbacks';
 
             function showGlobalStatus(message, isError = false) {
                 globalStatusMessageEl.textContent = message;

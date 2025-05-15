@@ -71,7 +71,7 @@
             if(thinkingIndicator) thinkingIndicator.style.display = 'block';
 
             try {
-                const response = await fetch('http://127.0.0.1:8000/api/ask', {
+                const response = await fetch('/api/ask', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -175,7 +175,7 @@
         async function submitFeedbackToServer(question, answer, feedbackType, details = null) {
             console.log(`提交回饋: 問題="${question}", 回答="${answer}", 類型=${feedbackType}, 細節=${details}`);
             try {
-                const response = await fetch('http://127.0.0.1:8000/api/feedback', {
+                const response = await fetch('/api/feedback', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

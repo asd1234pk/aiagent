@@ -1,25 +1,25 @@
 {
     "overall_status": {
-        "last_full_rebuild_timestamp": "2025-05-15T11:34:32.793914",
-        "last_any_sync_timestamp": "2025-05-15T11:34:32.793914",
-        "total_indexed_vectors": 292,
-        "message": "知識庫已成功更新。"
+        "last_full_rebuild_timestamp": "2025-05-15T14:10:08.035973",
+        "last_any_sync_timestamp": "2025-05-15T14:10:08.035973",
+        "total_indexed_vectors": 0,
+        "message": "完整重建/更新: 已處理的獨立區塊未能成功生成嵌入或沒有新內容需添加。"
     },
     "sources": {
         "website": {
-            "last_sync_timestamp": "2025-05-15T11:34:32.793914",
-            "status": "success",
-            "message": "知識庫已成功更新。",
+            "last_sync_timestamp": "2025-05-15T14:10:08.035973",
+            "status": "success_no_new_embeddings",
+            "message": "已處理的獨立區塊未能成功生成嵌入或沒有新內容需添加。",
             "processed_items": 228,
-            "embedded_items": 228,
+            "embedded_items": "N/A (Global Embed)",
             "target_config_url": "https://www.ohealth.com.tw/sitemap.xml"
         },
         "word_documents": {
-            "last_sync_timestamp": "2025-05-15T11:34:32.793914",
-            "status": "success",
-            "message": "知識庫已成功更新。",
+            "last_sync_timestamp": "2025-05-15T14:10:08.035973",
+            "status": "success_no_new_embeddings",
+            "message": "已處理的獨立區塊未能成功生成嵌入或沒有新內容需添加。",
             "processed_items": 64,
-            "embedded_items": 64,
+            "embedded_items": "N/A (Global Embed)",
             "target_config_url": "knowledge_docs/word_documents"
         }
     }

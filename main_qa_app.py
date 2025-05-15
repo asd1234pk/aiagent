@@ -91,6 +91,16 @@ class FeedbackRequest(BaseModel):
     details: Optional[str] = None # User's detailed textual feedback
     session_id: Optional[str] = None # Optional session ID for tracking
 
+class FeedbackResponse(BaseModel): # For responding with the created feedback
+    id: str
+    question: Optional[str] = None
+    answer: str
+    feedback_type: str
+    details: Optional[str] = None
+    timestamp: str
+    status: str
+    admin_notes: Optional[str] = None
+
 class FeedbackItem(FeedbackRequest): # Inherits fields from FeedbackRequest for display
     id: str
     timestamp: str
@@ -252,34 +262,83 @@ class MedicalAssistantApp:
             print(f"Error calling OpenAI API: {e}")
             return f"呼叫 AI 模型時發生錯誤: {e}", sources_for_response
 
+# Function to load feedbacks (similar to existing logic in get_all_feedbacks)
+def load_feedbacks_from_file() -> List[FeedbackItem]:
+    if not os.path.exists(FEEDBACK_FILE):
+        return []
+    try:
+        with open(FEEDBACK_FILE, 'r', encoding='utf-8') as f:
+            return [FeedbackItem(**item) for item in json.load(f)]
+    except (json.JSONDecodeError, IOError) as e:
+        print(f"Error loading feedbacks: {e}")
+        return []
+
+# Function to save feedbacks
+def save_feedbacks_to_file(feedbacks: List[FeedbackItem]):
+    try:
+        with open(FEEDBACK_FILE, 'w', encoding='utf-8') as f:
+            json.dump([fb.model_dump() for fb in feedbacks], f, indent=4, ensure_ascii=False)
+    except IOError as e:
+        print(f"Error saving feedbacks: {e}")
+
+# Ensure assistant_app_instance is available for routes
+# This relies on the lifespan event populating app_state['assistant_app']
+def get_assistant_app() -> MedicalAssistantApp:
+    if 'assistant_app' not in app_state or app_state['assistant_app'] is None:
+        # This case should ideally not happen if lifespan is working correctly
+        # and requests are made after startup.
+        print("CRITICAL: MedicalAssistantApp not initialized in app_state!")
+        # Fallback or error, though this path suggests a deeper issue
+        # For now, let's try to initialize it here as a last resort, though this is not ideal
+        # as it might not have the full context or might be re-initialized multiple times.
+        # A better approach would be to raise an HTTPException to indicate server error.
+        raise HTTPException(status_code=503, detail="Assistant service not ready. Please try again shortly.")
+    return app_state['assistant_app']
+
 @app.post("/api/ask", response_model=AnswerResponse)
 async def ask_question(request: QuestionRequest):
     # Get the assistant app instance from app_state populated by lifespan manager
-    current_assistant_app = app_state.get('assistant_app')
-
-    if not current_assistant_app:
-        # This case should ideally not be hit if lifespan manager works correctly
-        # and the app is running, but it's a good safeguard.
-        print("ERROR in /api/ask: MedicalAssistantApp instance not found in app_state.")
-        raise HTTPException(status_code=503, detail="Medical Assistant App is not properly initialized or available.")
+    assistant_app = get_assistant_app()
+    if not assistant_app: # Should be handled by get_assistant_app raising HTTPException
+        raise HTTPException(status_code=503, detail="AI Service not available.")
     
-    user_question = request.question
-    if not user_question:
-        raise HTTPException(status_code=400, detail="Question cannot be empty.")
-
-    answer_text, sources = current_assistant_app.answer_question(user_question)
-    
-    if answer_text is None: # Should only happen if answer_question itself returns None for text
-        # Consider what specific error or default message to return here.
-        # For now, if answer_question returns (None, []), we might treat it as "could not answer"
-        # but the current answer_question implementation tries to always return a string for answer_text.
-        # This is more of a safeguard.
-        print("Warning in /api/ask: answer_text was None, returning 500.") 
-        raise HTTPException(status_code=500, detail="Failed to generate an answer due to an internal issue.")
-        
+    answer_text, sources = assistant_app.answer_question(request.question)
+    if answer_text is None:
+        raise HTTPException(status_code=500, detail="Error generating answer")
     return AnswerResponse(answer=answer_text, sources=sources)
 
-# --- Admin API Endpoints for Prompt Settings ---
+@app.post("/api/feedback", response_model=FeedbackResponse)
+async def submit_feedback(feedback_data: FeedbackRequest):
+    feedbacks = load_feedbacks_from_file()
+    
+    new_feedback_id = f"fb_{int(datetime.now().timestamp() * 1000)}_{len(feedbacks) + 1}"
+    
+    new_feedback = FeedbackItem(
+        id=new_feedback_id,
+        timestamp=datetime.now().isoformat(),
+        question=feedback_data.question,
+        answer=feedback_data.answer,
+        feedback_type=feedback_data.feedback_type,
+        details=feedback_data.details,
+        session_id=feedback_data.session_id, # Make sure this is included if present in FeedbackRequest
+        status="pending_review", # Default status for new feedback
+        admin_notes=None
+    )
+    
+    feedbacks.append(new_feedback)
+    save_feedbacks_to_file(feedbacks)
+    
+    # Return the created feedback item, matching FeedbackResponse model
+    return FeedbackResponse(
+        id=new_feedback.id,
+        question=new_feedback.question,
+        answer=new_feedback.answer,
+        feedback_type=new_feedback.feedback_type,
+        details=new_feedback.details,
+        timestamp=new_feedback.timestamp,
+        status=new_feedback.status,
+        admin_notes=new_feedback.admin_notes
+    )
 
 @app.get("/api/admin/prompt-settings", response_model=PromptSettingsResponse)
 async def get_prompt_settings():

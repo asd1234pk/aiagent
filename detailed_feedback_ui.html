@@ -93,7 +93,7 @@
                     console.log(`提交詳細回饋: 問題="${storedQuestion}", 回答="${storedAnswer}", 類型=${feedbackType}, 細節=${details}`);
                     
                     try {
-                        const response = await fetch('http://127.0.0.1:8000/api/feedback', {
+                        const response = await fetch('/api/feedback', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
