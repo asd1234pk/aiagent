@@ -59,6 +59,17 @@
                     </div>
                     <div id="word-file-upload-status" class="status-message" style="margin-top:10px;"></div>
                     
+                    <hr style="margin: 20px 0;"> <!-- Separator -->
+
+                    <div class="form-group">
+                        <label for="zipFileUpload">上傳包含 Word 文件的 ZIP 壓縮檔 (.zip)：</label>
+                        <input type="file" id="zipFileUpload" accept=".zip" style="margin-bottom: 5px;"><br>
+                        <label for="extractFolderName" style="margin-right: 5px;">解壓縮到資料夾 (選填，預設為 ZIP 檔名):</label>
+                        <input type="text" id="extractFolderName" placeholder="例如：專案A文件" style="margin-bottom: 10px; width: auto; display: inline-block;">
+                        <button id="uploadZipFileButton" class="button button-success">上傳並解壓縮 ZIP</button>
+                    </div>
+                    <div id="zip-file-upload-status" class="status-message" style="margin-top:10px;"></div>
+
                     <h4>目前知識庫中的 Word 文件：</h4>
                     <div id="word-file-list-status" class="status-message"></div>
                     <div class="table-container" style="margin-top:10px;">
@@ -151,6 +162,12 @@
             const wordFileUploadStatusDiv = document.getElementById('word-file-upload-status');
             const wordFileListStatusDiv = document.getElementById('word-file-list-status');
             const WORD_DOCS_UPLOAD_DIR_DISPLAY = "knowledge_docs/word_documents"; // For display purposes
+
+            // New Elements for ZIP Upload
+            const zipFileUploadInput = document.getElementById('zipFileUpload');
+            const extractFolderNameInput = document.getElementById('extractFolderName');
+            const uploadZipFileButton = document.getElementById('uploadZipFileButton');
+            const zipFileUploadStatusDiv = document.getElementById('zip-file-upload-status');
 
             let currentWordFiles = []; // To store the list of current files for checking duplicates
 
@@ -579,6 +596,56 @@
                         showFileUploadStatus(error.message, true);
                     }
                 });
+            }
+
+            // --- ZIP Upload Functionality ---
+            if (uploadZipFileButton) {
+                uploadZipFileButton.addEventListener('click', async () => {
+                    if (!zipFileUploadInput.files || zipFileUploadInput.files.length === 0) {
+                        showZipUploadStatus('請先選擇一個 .zip 檔案。', true);
+                        return;
+                    }
+                    const file = zipFileUploadInput.files[0];
+                    if (!file.name.endsWith('.zip')) {
+                        showZipUploadStatus('檔案類型錯誤，僅支援 .zip 格式。', true);
+                        return;
+                    }
+
+                    const extractToFolder = extractFolderNameInput.value.trim();
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    if (extractToFolder) {
+                        formData.append('extract_to_folder_name', extractToFolder);
+                    }
+
+                    showZipUploadStatus(`正在上傳並解壓縮 ZIP 檔案 '${file.name}' ...`);
+                    try {
+                        const response = await fetch(`${apiBaseUrl}/knowledgebase/upload-zip`, {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const result = await response.json();
+                        if (!response.ok) {
+                            throw new Error(result.detail || `ZIP 上傳或解壓縮失敗: ${response.status}`);
+                        }
+                        showZipUploadStatus(`${result.message} (共 ${result.extracted_files_count} 個檔案被解壓縮)`);
+                        zipFileUploadInput.value = ''; // Reset file input
+                        extractFolderNameInput.value = ''; // Reset folder name input
+                        loadWordFiles(); // Refresh the entire file tree
+                    } catch (error) {
+                        console.error('上傳或解壓縮 ZIP 檔案錯誤:', error);
+                        showZipUploadStatus(error.message, true);
+                    }
+                });
+            }
+
+            function showZipUploadStatus(message, isError = false) {
+                zipFileUploadStatusDiv.textContent = message;
+                zipFileUploadStatusDiv.className = 'status-message';
+                if (isError) zipFileUploadStatusDiv.classList.add('error');
+                else zipFileUploadStatusDiv.classList.add('success');
+                zipFileUploadStatusDiv.style.display = 'block';
+                setTimeout(() => { zipFileUploadStatusDiv.style.display = 'none'; }, 7000);
             }
 
             // --- End Word Document Management Functions ---

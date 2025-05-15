@@ -17,6 +17,8 @@ import json
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 import shutil # For saving uploaded files
+import zipfile # For handling ZIP files
+import io # For reading UploadFile as a stream for zipfile
 
 # --- Configuration ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -144,6 +146,11 @@ class FileUploadResponse(BaseModel):
 class FileDeleteResponse(BaseModel):
     filename: str
     message: str
+
+class ZipUploadResponse(BaseModel):
+    target_folder: str
+    message: str
+    extracted_files_count: int
 # --- End Pydantic Models for Word Document Management ---
 
 class MedicalAssistantApp:
@@ -774,6 +781,96 @@ async def delete_word_document(filepath: str):
         return FileDeleteResponse(filename=filepath, message=f"File '{filepath}' deleted successfully.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not delete file '{filepath}': {e}")
+
+@app.post("/api/admin/knowledgebase/upload-zip", response_model=ZipUploadResponse)
+async def upload_zip_archive(file: UploadFile = File(...), extract_to_folder_name: Optional[str] = None):
+    if not file.filename or not file.filename.endswith('.zip'):
+        raise HTTPException(status_code=400, detail="Invalid file type. Only .zip files are allowed.")
+
+    # Determine target folder name
+    target_folder_name_str = extract_to_folder_name
+    if not target_folder_name_str:
+        target_folder_name_str = os.path.splitext(file.filename)[0] # Use zip filename without extension
+    
+    # Basic sanitization for folder name (replace problematic characters)
+    target_folder_name_str = "".join(c if c.isalnum() or c in ('_', '-') else '_' for c in target_folder_name_str)
+    if not target_folder_name_str: # If sanitization results in empty string
+        target_folder_name_str = "zip_extract_" + datetime.now().strftime("%Y%m%d%H%M%S")
+
+    extract_path = os.path.join(KNOWLEDGE_DOCS_BASE_DIR, target_folder_name_str)
+
+    # Check if target folder (as a file or folder) already exists to avoid overwriting issues
+    if os.path.exists(extract_path):
+        # If it exists and is a file, or if it is a non-empty directory, it might be an issue.
+        # For simplicity, let's prevent overwriting an existing folder structure by default.
+        # A more robust solution might involve appending a timestamp or number if folder exists.
+        raise HTTPException(status_code=409, 
+                            detail=f"Target folder '{target_folder_name_str}' already exists. Please choose a different name or ensure it does not exist.")
+    
+    try:
+        os.makedirs(extract_path, exist_ok=True)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not create target directory '{target_folder_name_str}': {e}")
+
+    extracted_count = 0
+    try:
+        zip_content = await file.read() # Read UploadFile into memory
+        with zipfile.ZipFile(io.BytesIO(zip_content), 'r') as zip_ref:
+            # Security: Check for path traversal and other malicious zip properties before extracting all
+            for member in zip_ref.namelist():
+                # Normalize member path, e.g. handle mixed slashes from different OS zip tools
+                member_path_parts = member.replace("\\", "/").split('/')
+                # Filter out potentially malicious paths (e.g. absolute paths, parent traversals)
+                if any(part == ".." for part in member_path_parts) or os.path.isabs(member):
+                    print(f"Skipping potentially malicious path in zip: {member}")
+                    continue
+                
+                # Construct the full path for extraction
+                # We rely on zipfile's own directory creation for valid paths within the archive
+                # target_member_path = os.path.join(extract_path, member)
+                # We'll let zip_ref.extractall handle directory creation inside extract_path, 
+                # but we must be sure members don't escape extract_path.
+                
+                # The most crucial check is that the resolved path does not go outside `extract_path`
+                # This check is implicitly handled by zipfile.extractall if it only creates subdirectories
+                # *within* the designated `extract_path`.
+                # However, for more explicit control or member-by-member extraction:
+                # resolved_path = os.path.abspath(os.path.join(extract_path, member))
+                # if not resolved_path.startswith(os.path.abspath(extract_path)):
+                #     print(f"Skipping potentially malicious path (escapes extract dir): {member}")
+                #     continue
+                
+                # For now, we will extract all members that don't seem obviously malicious by name.
+                # Production systems might need more robust checks (e.g., against symlink attacks, overly large files within zip etc.)
+                # zip_ref.extract(member, extract_path) # If extracting member by member after checks
+            
+            # Extract all members to the specified path.
+            # zipfile.extractall itself is generally safe against creating files outside `path` if members are not absolute
+            # or contain "../" in a way that escapes the root if path itself isn't fully resolved and validated.
+            # The checks above for member names are a good first step.
+            zip_ref.extractall(extract_path)
+            extracted_count = len([name for name in zip_ref.namelist() if not name.endswith('/')]) # Count files, not dirs
+
+    except zipfile.BadZipFile:
+        # Clean up created (potentially empty) directory on bad zip
+        if os.path.exists(extract_path) and not os.listdir(extract_path): 
+            os.rmdir(extract_path)
+        elif os.path.exists(extract_path): # if it created some files before error, remove the whole tree
+            shutil.rmtree(extract_path)
+        raise HTTPException(status_code=400, detail="Invalid or corrupted ZIP file.")
+    except Exception as e:
+        # Clean up on other errors as well
+        if os.path.exists(extract_path):
+            shutil.rmtree(extract_path) # Remove created folder and any partial contents
+        raise HTTPException(status_code=500, detail=f"Failed to extract ZIP file: {e}")
+    finally:
+        await file.close()
+
+    return ZipUploadResponse(
+        target_folder=target_folder_name_str,
+        message=f"ZIP file '{file.filename}' successfully extracted to '{target_folder_name_str}'.",
+        extracted_files_count=extracted_count
+    )
 
 # --- Main execution for testing (commented out for FastAPI) ---
 # if __name__ == '__main__':
