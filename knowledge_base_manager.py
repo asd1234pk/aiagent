@@ -19,6 +19,8 @@ from typing import Optional, List, Dict, Any
 # Adjust the import path if necessary based on your project structure.
 from knowledge_base_packagers import website_scraper
 from knowledge_base_packagers import word_processor # 新增匯入
+from knowledge_base_packagers import google_drive_processor # 新增 Google Drive 匯入
+from knowledge_base_packagers import smb_processor # 新增 SMB 匯入
 
 # Attempt to import a configuration URL from the scraper for display purposes
 try:
@@ -68,6 +70,22 @@ DEFAULT_KB_STATUS = {
             "embedded_items": 0,
             "target_config_url": None # 將會設為 word_processor.WORD_DOCS_DIR
         },
+        "google_drive": { # 新增 Google Drive 來源狀態
+            "last_sync_timestamp": None,
+            "status": "pending",
+            "message": "等待同步",
+            "processed_items": 0,
+            "embedded_items": 0,
+            "target_config_url": "Google Drive Folder ID / Credentials Path (see google_drive_processor.py)" # 預留設定路徑提示
+        },
+        "smb": { # 新增 SMB 來源狀態
+            "last_sync_timestamp": None,
+            "status": "pending",
+            "message": "等待同步",
+            "processed_items": 0,
+            "embedded_items": 0,
+            "target_config_url": "SMB Share Path / Credentials (see smb_processor.py)" # 預留設定路徑提示
+        },
         # Future sources like mysql can be added here
         # "mysql": { ... }
     }
@@ -95,6 +113,18 @@ class KnowledgeBaseManager:
         # 這樣即使在首次 _read_kb_status 之前，DEFAULT_KB_STATUS 也是最新的
         if DEFAULT_KB_STATUS["sources"].get("word_documents"):
              DEFAULT_KB_STATUS["sources"]["word_documents"]["target_config_url"] = word_processor.WORD_DOCS_DIR
+        # 初始化新增來源的 target_config_url (如果它們的處理器中有定義的設定變數)
+        # 由於 google_drive_processor 和 smb_processor 中的設定是註解掉的 placeholder，
+        # 這裡我們暫時不直接從模組中讀取，而是使用 DEFAULT_KB_STATUS 中已定義的提示字串。
+        # 如果未來這些處理器模組中定義了可匯出的設定變數 (例如 GOOGLE_DRIVE_FOLDER_ID)，
+        # 則可以像 word_processor.WORD_DOCS_DIR 一樣更新它們。
+        # 例如:
+        # if DEFAULT_KB_STATUS["sources"].get("google_drive") and hasattr(google_drive_processor, 'GOOGLE_DRIVE_FOLDER_ID'):
+        #      DEFAULT_KB_STATUS["sources"]["google_drive"]["target_config_url"] = google_drive_processor.GOOGLE_DRIVE_FOLDER_ID
+        # else:
+        #      DEFAULT_KB_STATUS["sources"]["google_drive"]["target_config_url"] = "Google Drive Folder ID (config in processor)"
+
+        # 目前，DEFAULT_KB_STATUS 中已經為新的 sources 提供了 target_config_url 的預留文字。
 
     def _get_embedding(self, text, model=EMBEDDING_MODEL):
         '''Generates embedding for a given text using OpenAI.'''
@@ -169,6 +199,11 @@ class KnowledgeBaseManager:
                                     elif src_key == "website" and merged_status["sources"][src_key].get("target_config_url") is None:
                                         # s_config_url 應該在檔案頂部定義
                                         merged_status["sources"][src_key]["target_config_url"] = s_config_url 
+                                    # 新增 google_drive 和 smb 的 target_config_url 初始化 (如果為 None)
+                                    elif src_key == "google_drive" and merged_status["sources"][src_key].get("target_config_url") is None:
+                                        merged_status["sources"][src_key]["target_config_url"] = DEFAULT_KB_STATUS["sources"]["google_drive"]["target_config_url"]
+                                    elif src_key == "smb" and merged_status["sources"][src_key].get("target_config_url") is None:
+                                        merged_status["sources"][src_key]["target_config_url"] = DEFAULT_KB_STATUS["sources"]["smb"]["target_config_url"]
                                         
                                     if src_key in loaded_status["sources"] and isinstance(loaded_status["sources"][src_key], dict):
                                         merged_status["sources"][src_key].update(loaded_status["sources"][src_key])
@@ -183,11 +218,21 @@ class KnowledgeBaseManager:
                                 loaded_status["sources"][default_src_key]["target_config_url"] = word_processor.WORD_DOCS_DIR
                             elif default_src_key == "website":
                                 loaded_status["sources"][default_src_key]["target_config_url"] = s_config_url
+                            # 新增: 初始化新來源的 target_config_url (如果它們在讀取的 status 中不存在)
+                            elif default_src_key == "google_drive":
+                                loaded_status["sources"][default_src_key]["target_config_url"] = DEFAULT_KB_STATUS["sources"]["google_drive"]["target_config_url"]
+                            elif default_src_key == "smb":
+                                loaded_status["sources"][default_src_key]["target_config_url"] = DEFAULT_KB_STATUS["sources"]["smb"]["target_config_url"]
                         elif loaded_status["sources"][default_src_key].get("target_config_url") is None: # 如果存在但 URL 未設定
                             if default_src_key == "word_documents":
                                 loaded_status["sources"][default_src_key]["target_config_url"] = word_processor.WORD_DOCS_DIR
                             elif default_src_key == "website":
                                 loaded_status["sources"][default_src_key]["target_config_url"] = s_config_url
+                            # 新增: 設定新來源的 target_config_url (如果已存在但 URL 為 None)
+                            elif default_src_key == "google_drive":
+                                loaded_status["sources"][default_src_key]["target_config_url"] = DEFAULT_KB_STATUS["sources"]["google_drive"]["target_config_url"]
+                            elif default_src_key == "smb":
+                                loaded_status["sources"][default_src_key]["target_config_url"] = DEFAULT_KB_STATUS["sources"]["smb"]["target_config_url"]
 
                     return loaded_status
             except (json.JSONDecodeError, IOError) as e:
@@ -307,276 +352,271 @@ class KnowledgeBaseManager:
         for current_source in sources_to_process:
             print(f"--- 開始處理來源: {current_source} ---")
             source_stats = source_specific_stats[current_source]
-            raw_chunks_current_source = []
+            source_config = current_kb_status["sources"].get(current_source, {}) # Get current config/status for the source
+            source_status_update = {"status": "processing", "message": "正在處理中...", "last_sync_timestamp": operation_timestamp}
 
-            if current_source == "website":
-                print(f"步驟 1/3 ({current_source}): 從網站抓取內容...")
-                raw_chunks_current_source = website_scraper.process_website_articles()
-            elif current_source == "word_documents": # 新增 Word 文件處理邏輯
-                print(f"步驟 1/3 ({current_source}): 從 Word 文件讀取內容...")
-                raw_chunks_current_source = word_processor.process_all_documents()
-            # elif current_source == "mysql":
-            #     print(f"步驟 1/3 ({current_source}): 從 MySQL 讀取內容...")
-            #     # raw_chunks_current_source = mysql_processor.fetch_and_format_data() # Placeholder
-            else:
-                warn_msg = f"警告: 資料來源 '{current_source}' 的處理邏輯尚未實現。"
-                print(warn_msg)
+            raw_chunks_this_source = []
+            try:
+                if current_source == "website":
+                    # 在呼叫 process_all_documents 之前更新狀態
+                    current_kb_status["sources"]["website"].update(source_status_update)
+                    self._write_kb_status(current_kb_status) # Write intermediate status
+                    raw_chunks_this_source = website_scraper.process_all_documents()
+                elif current_source == "word_documents":
+                     # 在呼叫 process_all_documents 之前更新狀態
+                    current_kb_status["sources"]["word_documents"].update(source_status_update)
+                    self._write_kb_status(current_kb_status) # Write intermediate status
+                    raw_chunks_this_source = word_processor.process_all_documents()
+                elif current_source == "google_drive": # 新增 Google Drive 處理
+                    current_kb_status["sources"]["google_drive"].update(source_status_update)
+                    self._write_kb_status(current_kb_status)
+                    raw_chunks_this_source = google_drive_processor.process_all_documents()
+                elif current_source == "smb": # 新增 SMB 處理
+                    current_kb_status["sources"]["smb"].update(source_status_update)
+                    self._write_kb_status(current_kb_status)
+                    raw_chunks_this_source = smb_processor.process_all_documents()
+                # Add other sources here with elif current_source == "new_source_key":
+                else:
+                    print(f"未知的資料來源類型: {current_source}，跳過。")
+                    source_stats["status"] = "error"
+                    source_stats["message"] = f"未知的資料來源類型 {current_source}"
+                    # Update status for this specific source
+                    current_kb_status["sources"][current_source].update({
+                        "status": "error", 
+                        "message": f"未知的資料來源類型",
+                        "last_sync_timestamp": operation_timestamp 
+                    })
+                    continue # Skip to next source
+
+                source_stats["raw_count"] = len(raw_chunks_this_source)
+                print(f"來源 {current_source} 原始提取了 {source_stats['raw_count']} 個區塊。")
+                if not raw_chunks_this_source:
+                    source_stats["status"] = "success_no_new_data"
+                    source_stats["message"] = "成功處理，但未提取到新的資料區塊。"
+                else:
+                    source_stats["status"] = "success_processed" # Temporary status
+                    source_stats["message"] = f"成功提取 {source_stats['raw_count']} 個原始區塊，等待嵌入。"
+                
+                # Update status immediately after processing this source
+                current_kb_status["sources"][current_source].update({
+                    "status": source_stats["status"],
+                    "message": source_stats["message"],
+                    "processed_items": source_stats["raw_count"], # 'processed' refers to raw chunks extracted
+                    "embedded_items": 0 # Reset embedded count for this sync, will be updated later
+                })
+
+            except Exception as e:
+                error_message = f"處理來源 {current_source} 時發生錯誤: {e}"
+                print(error_message)
+                self._add_sync_log_entry(log_operation_type, current_source, "error", error_message)
                 source_stats["status"] = "error"
-                source_stats["message"] = "處理邏輯未實現"
-                self._add_sync_log_entry(f"source_processing_{current_source}", current_source, "error", warn_msg)
-                continue
-
-            if not raw_chunks_current_source:
-                no_content_msg = f"來源 {current_source}: 未抓取到任何內容。"
-                print(no_content_msg)
-                source_stats["status"] = "success_no_data_found"
-                source_stats["message"] = "未找到任何原始資料"
-                all_raw_chunks_from_sources.extend([]) # ensure it's iterable later
-                self._add_sync_log_entry(f"source_processing_{current_source}", current_source, "success_no_data", no_content_msg)
-                continue
-            
-            source_stats["raw_count"] = len(raw_chunks_current_source)
-            print(f"來源 {current_source}: 抓取到 {source_stats['raw_count']} 個原始區塊。")
-            all_raw_chunks_from_sources.extend(raw_chunks_current_source)
-            self._add_sync_log_entry(f"source_processing_{current_source}", current_source, "success_fetched_data", f"抓取到 {source_stats['raw_count']} 個原始區塊。")
-            # Note: The deduplication below is global across all chunks gathered in this run.
-            # If source-specific deduplication before merging is needed, it should be done above.
-
-        if not all_raw_chunks_from_sources:
-            no_content_overall_msg = "所有已選來源均未提供任何內容可處理，知識庫更新中止。"
-            print(no_content_overall_msg)
-            current_kb_status["overall_status"]["message"] = "所有已選來源均未提供內容。"
-            current_kb_status["overall_status"]["last_any_sync_timestamp"] = operation_timestamp
-            if not source_filter : # Full rebuild context
-                 current_kb_status["overall_status"]["last_full_rebuild_timestamp"] = operation_timestamp
-            for src in sources_to_process: # Update status for processed sources
-                 current_kb_status["sources"][src].update({
-                    "last_sync_timestamp": operation_timestamp,
-                    "status": source_specific_stats[src]["status"] or "success_no_data_to_process",
-                    "message": source_specific_stats[src]["message"] or "沒有資料可處理",
+                source_stats["message"] = str(e)
+                current_kb_status["sources"][current_source].update({
+                    "status": "error", "message": str(e), "last_sync_timestamp": operation_timestamp,
                     "processed_items": 0, "embedded_items": 0
                 })
+            
+            all_raw_chunks_from_sources.extend(raw_chunks_this_source)
+            # Write status after each source is processed (or attempted)
             self._write_kb_status(current_kb_status)
-            self._save_vector_store() # Save potentially cleared index
-            self._add_sync_log_entry(log_operation_type, log_source_name_for_op, "skipped_empty_sources", no_content_overall_msg)
+
+        # --- 全局處理和嵌入 ---
+        if not all_raw_chunks_from_sources and not force_rebuild: # Only print if not a forced clean rebuild
+            print("所有來源均未提取到新的文本區塊。知識庫未作更改 (除非是強制重建)。")
+            # Update overall status
+            current_kb_status["overall_status"]["last_any_sync_timestamp"] = operation_timestamp
+            if not source_filter: current_kb_status["overall_status"]["last_full_rebuild_timestamp"] = operation_timestamp # If it was meant to be a full run
+            final_message = "所有來源均未提取到新的文本區塊。"
+            if force_rebuild and not source_filter : final_message = "完整強制重建完成，但未從任何來源提取到資料。"
+
+            current_kb_status["overall_status"]["message"] = final_message
+            # Ensure individual source statuses reflect no new data if they were successful but empty
+            for src in sources_to_process:
+                if current_kb_status["sources"][src]["status"] == "success_processed": # If it was marked as processed but resulted in no global chunks
+                     current_kb_status["sources"][src]["status"] = "success_no_new_data"
+                     current_kb_status["sources"][src]["message"] = "成功處理，但未提取到新的資料區塊 (或未被納入最終列表)。"
+            self._write_kb_status(current_kb_status)
+            self._add_sync_log_entry(log_operation_type, log_source_name_for_op, "success_no_new_data", final_message)
             return
-
-        print("對所有收集到的原始區塊進行統一去重...")
-        processed_chunk_identifiers = set()
-        unique_raw_chunks_final = []
-        duplicate_count_total = 0
-        for chunk_data in all_raw_chunks_from_sources:
-            # 使用 (source, text) 作為唯一標識符
-            # 對 text 進行正規化處理以提高去重準確性
-            source = chunk_data.get("source")
-            text = chunk_data.get("text", "")
-            
-            # 簡單正規化：移除多餘空白，轉小寫
-            # 注意：更複雜的正規化可能包括移除HTML標籤 (如果未清乾淨)、處理特殊字元等
-            # import re # 如果需要更複雜的正規表達式
-            normalized_text = ' '.join(text.split()).lower() # 替換所有空白序列為單個空格，並轉小寫
-            
-            identifier = (source, normalized_text)
-            if identifier not in processed_chunk_identifiers:
-                unique_raw_chunks_final.append(chunk_data) # 儲存原始的 chunk_data
-                processed_chunk_identifiers.add(identifier)
-            else:
-                duplicate_count_total += 1
         
-        if duplicate_count_total > 0:
-            print(f"統一去重完成，發現並移除了 {duplicate_count_total} 個重複的原始區塊。")
-        print(f"統一去重後剩餘 {len(unique_raw_chunks_final)} 個獨立區塊準備處理。")
+        print(f"從所有已處理來源總共收集到 {len(all_raw_chunks_from_sources)} 個原始文本區塊。準備進行嵌入。")
 
-        if not unique_raw_chunks_final:
-            no_unique_content_msg = "統一去重後沒有任何內容可處理，知識庫更新中止。"
-            print(no_unique_content_msg)
-            current_kb_status["overall_status"]["message"] = "去重後無獨立內容可處理。"
+        # 篩選掉重複的區塊 (基於 text 和 source) - 這是一個簡單的去重
+        # TODO: 更細緻的去重策略，例如考慮到如果 source_filter 被使用，
+        #       我們可能不希望移除其他來源先前已存在的相同內容，除非是 force_rebuild。
+        #       目前的邏輯是：如果 force_rebuild + source_filter，舊的 source data 實際上不會被移除，
+        #       新的會被加入。如果只是 source_filter (no force_rebuild)，新的會被加入。
+        #       如果 full force_rebuild，所有東西都會被清空重建。
+        
+        # 如果不是針對特定來源的強制重建，那麼在加入新區塊前，需要考慮如何處理舊的同來源區塊。
+        # 目前的實現是直接加入。若要實現 source-specific rebuild，需要先從 self.doc_metadata 和 self.index 中移除該來源的舊條目。
+        # 這部分邏輯比較複雜，暫時簡化處理：force_rebuild 清空所有，否則追加。
+
+        unique_chunks_to_embed = []
+        if not force_rebuild or source_filter: # If not a full clean rebuild, check for existing
+            existing_chunk_signatures = set()
+            if self.doc_metadata:
+                for meta in self.doc_metadata:
+                    # Signature considers text and a more specific source identifier if available
+                    # For example, meta might have 'source_file_path' or similar unique ID
+                    # For now, using meta['text'] and meta['source'] as a basic signature
+                    existing_chunk_signatures.add((meta.get('text', ''), meta.get('source', '')))
+
+            for chunk in all_raw_chunks_from_sources:
+                chunk_signature = (chunk.get('text', ''), chunk.get('source', ''))
+                if chunk_signature not in existing_chunk_signatures:
+                    unique_chunks_to_embed.append(chunk)
+                    existing_chunk_signatures.add(chunk_signature) # Add to set to avoid duplicates from current batch
+            
+            print(f"過濾後，有 {len(unique_chunks_to_embed)} 個新的唯一區塊需要嵌入。")
+            if not unique_chunks_to_embed and all_raw_chunks_from_sources: # Had raw, but all were duplicates
+                final_message = "提取到資料區塊，但均為現有知識庫中已存在的重複內容。"
+                print(final_message)
+                current_kb_status["overall_status"]["last_any_sync_timestamp"] = operation_timestamp
+                if not source_filter: current_kb_status["overall_status"]["last_full_rebuild_timestamp"] = operation_timestamp
+                current_kb_status["overall_status"]["message"] = final_message
+                # Update source statuses to reflect duplicates found if they successfully processed data
+                for src in sources_to_process:
+                    if current_kb_status["sources"][src]["status"] == "success_processed":
+                        current_kb_status["sources"][src]["status"] = "success_duplicates_found"
+                        current_kb_status["sources"][src]["message"] = "成功提取資料，但均為重複內容。"
+                        current_kb_status["sources"][src]["embedded_items"] = 0 # No new items embedded
+                self._write_kb_status(current_kb_status)
+                self._add_sync_log_entry(log_operation_type, log_source_name_for_op, "success_duplicates_found", final_message)
+                return
+        else: # Full force_rebuild, so all raw chunks are "unique" for this new index
+            unique_chunks_to_embed = all_raw_chunks_from_sources
+            print(f"完整重建模式：所有 {len(unique_chunks_to_embed)} 個提取的區塊將被嵌入。")
+
+
+        if not unique_chunks_to_embed:
+            final_message = "沒有新的唯一文本區塊可供嵌入。"
+            if force_rebuild and not source_filter: final_message = "完整強制重建完成，但未找到可嵌入的新資料。"
+            print(final_message)
             current_kb_status["overall_status"]["last_any_sync_timestamp"] = operation_timestamp
             if not source_filter: current_kb_status["overall_status"]["last_full_rebuild_timestamp"] = operation_timestamp
-            # Update status for relevant sources (though unique_count and embedded_count will be 0)
-            for src_key in sources_to_process:
-                # This part is tricky as unique_raw_chunks_final is global.
-                # We'd need to map back to attribute unique chunks to original sources if we want per-source unique counts here.
-                # For now, just mark them based on initial processing.
-                current_kb_status["sources"][src_key].update({
-                    "last_sync_timestamp": operation_timestamp,
-                    "status": source_specific_stats[src_key]["status"] if source_specific_stats[src_key]["status"] not in ["pending", ""] else "success_no_unique_data",
-                    "message": source_specific_stats[src_key]["message"] if source_specific_stats[src_key]["message"] not in ["", "等待處理"] else "去重後無獨立內容",
-                    "processed_items": source_specific_stats[src_key]["raw_count"], # reflects raw items from this source
-                    "embedded_items": 0 # no unique items were embedded
-                })
+            current_kb_status["overall_status"]["message"] = final_message
             self._write_kb_status(current_kb_status)
-            self._save_vector_store()
-            self._add_sync_log_entry(log_operation_type, log_source_name_for_op, "skipped_no_unique_data", no_unique_content_msg)
+            self._add_sync_log_entry(log_operation_type, log_source_name_for_op, "success_no_new_embeddings", final_message)
             return
 
-        print("步驟 2/3: 為新的獨立區塊生成嵌入向量...")
+        # Embedding the new unique chunks
         new_embeddings = []
-        new_metadata = []
-        
-        # This existing_texts_sources check is for incremental adds, not for force_rebuild.
-        # If force_rebuild (full) is True, self.doc_metadata is already cleared.
-        # If force_rebuild for a specific source, this logic needs refinement
-        # to only apply to non-force_rebuilt items or existing items from other sources.
-        # For simplicity, if source_filter is active, we are effectively adding,
-        # so this check can prevent re-adding identical items already in the index from a *previous* run.
-        existing_texts_sources_for_incremental_check = set()
-        if not (not source_filter and force_rebuild): # if not a full force rebuild
-            for meta in self.doc_metadata:
-                 # Check if 'text' key exists to avoid errors with potentially different metadata structures
-                if 'text' in meta and 'source' in meta:
-                    existing_texts_sources_for_incremental_check.add((meta['text'][:200], meta['source']))
+        new_metadata_for_embeddings = []
+        embedded_count_by_source = {src: 0 for src in sources_to_process}
 
-
-        embedded_count_this_run = 0
-        for i, chunk_data in enumerate(unique_raw_chunks_final):
-            # Attributing embedded counts back to original sources is complex here
-            # because unique_raw_chunks_final is a mix.
-            # For now, embedded_count_this_run is global for this operation.
-            print(f"  處理中獨立區塊 {i+1}/{len(unique_raw_chunks_final)}: '{chunk_data.get('title', 'N/A')[:50]}...' 來自 {chunk_data.get('source', 'N/A')}")
-            text_to_embed = chunk_data.get("text")
-            source_url = chunk_data.get("source") # This is the original URL from the chunk
-            title = chunk_data.get("title")
-
-            if not text_to_embed:
-                print(f"    警告：區塊 {i+1} 沒有文本內容，跳過。")
-                continue
-            
-            # Refined check for existing items (applies if not a full force_rebuild)
-            if (text_to_embed[:200], source_url) in existing_texts_sources_for_incremental_check:
-                # This print implies it's an *incremental* add being skipped.
-                # print(f"    區塊來自 {source_url} (標題: {title}) 已存在於知識庫中 (基於檢查)，跳過嵌入。")
-                continue
-
-            embedding = self._get_embedding(text_to_embed)
+        for i, chunk_data in enumerate(unique_chunks_to_embed):
+            print(f"  正在嵌入區塊 {i+1}/{len(unique_chunks_to_embed)} (來源: {chunk_data.get('type', 'N/A')}, 標題: {chunk_data.get('title', 'N/A')})...")
+            embedding = self._get_embedding(chunk_data["text"])
             if embedding is not None:
                 new_embeddings.append(embedding)
-                new_metadata.append({
-                    "text": text_to_embed,
-                    "source": source_url, # URL of the specific article/document
-                    "title": title,
-                    # "original_data_source_type": chunk_data.get("data_source_type") # If we pass this from scrapers
-                })
-                embedded_count_this_run +=1
+                new_metadata_for_embeddings.append(chunk_data) # Store the whole chunk_data as metadata
+                # Increment embedded count for the source of this chunk
+                source_type = chunk_data.get("type") # e.g., "website_page", "word_document", "google_drive_document", "smb_document"
+                # Map source_type back to source_key used in current_kb_status["sources"]
+                source_key_for_stats = None
+                if source_type == "website_page": source_key_for_stats = "website"
+                elif source_type == "word_document": source_key_for_stats = "word_documents"
+                elif source_type == "google_drive_document": source_key_for_stats = "google_drive"
+                elif source_type == "smb_document": source_key_for_stats = "smb"
+                
+                if source_key_for_stats and source_key_for_stats in embedded_count_by_source:
+                    embedded_count_by_source[source_key_for_stats] += 1
             else:
-                print(f"    未能為區塊 {i+1} (來源: {source_url}) 生成嵌入，跳過。")
-        
-        current_operation_final_status = "success"
-        current_operation_final_message = "知識庫已成功更新。"
+                print(f"    警告：無法為來源 '{chunk_data.get('source')}' 的區塊生成嵌入，已跳過。")
+                # Log this specific chunk embedding failure if necessary
 
         if not new_embeddings:
-            print("沒有新的獨立內容成功生成嵌入。")
-            current_operation_final_status = "success_no_new_embeddings"
-            current_operation_final_message = "已處理的獨立區塊未能成功生成嵌入或沒有新內容需添加。"
-            self._add_sync_log_entry(log_operation_type, log_source_name_for_op, "success_no_new_embeddings", current_operation_final_message)
-            # No change to self.index or self.doc_metadata if new_embeddings is empty
-        else:
-            print(f"成功為 {len(new_embeddings)} 個新獨立區塊生成嵌入。")
-            embeddings_np = np.array(new_embeddings).astype('float32')
-            dimension = embeddings_np.shape[1]
+            final_message = "所有提取到的唯一區塊都未能成功嵌入。"
+            print(final_message)
+            current_kb_status["overall_status"]["last_any_sync_timestamp"] = operation_timestamp
+            if not source_filter: current_kb_status["overall_status"]["last_full_rebuild_timestamp"] = operation_timestamp
+            current_kb_status["overall_status"]["message"] = final_message
+            # Update source statuses if they had unique chunks but none embedded
+            for src_key in sources_to_process:
+                # Check if this source contributed to unique_chunks_to_embed
+                source_had_unique_chunks = any(chunk.get("type") and 
+                                               ((chunk.get("type") == "website_page" and src_key == "website") or \
+                                                (chunk.get("type") == "word_document" and src_key == "word_documents") or \
+                                                (chunk.get("type") == "google_drive_document" and src_key == "google_drive") or \
+                                                (chunk.get("type") == "smb_document" and src_key == "smb")) \
+                                               for chunk in unique_chunks_to_embed)
+                if source_had_unique_chunks and current_kb_status["sources"][src_key]["status"] not in ["error", "success_no_new_data"]:
+                    current_kb_status["sources"][src_key]["status"] = "error_embedding"
+                    current_kb_status["sources"][src_key]["message"] = "提取到唯一區塊，但嵌入失敗。"
+                    current_kb_status["sources"][src_key]["embedded_items"] = 0
 
-            print("步驟 3/3: 更新 FAISS 索引...")
-            if self.index is None:
-                if embeddings_np.size > 0: # only init if there are embeddings
-                    self.index = faiss.IndexFlatL2(dimension)
-                    print(f"已初始化新的 FAISS 索引，維度為 {dimension}。")
-                else: # Should not happen if new_embeddings check above is proper
-                    print("沒有嵌入可以初始化索引。")
-            
-            if self.index is not None:
-                if self.index.d != dimension and embeddings_np.size > 0:
-                    print(f"錯誤：新嵌入的維度 ({dimension}) 與現有索引的維度 ({self.index.d}) 不符。")
-                    # This is a critical error. Decide recovery or stop.
-                    # For now, we will not add these embeddings and report error.
-                    current_operation_final_status = "error_dimension_mismatch"
-                    current_operation_final_message = f"新嵌入維度({dimension})與索引維度({self.index.d})不符。"
-                    self._add_sync_log_entry(log_operation_type, log_source_name_for_op, "error", current_operation_final_message)
-                    # Do not add incompatible embeddings
-                elif embeddings_np.size > 0:
-                    self.index.add(embeddings_np)
-                    self.doc_metadata.extend(new_metadata)
-                    print(f"已將 {len(new_embeddings)} 個新向量添加到索引中。")
-            else: # self.index is still None, meaning no embeddings to add to create it
-                 if embeddings_np.size > 0: # Should be caught earlier
-                    print("錯誤：索引未初始化但有嵌入數據。這不應該發生。")
-                    current_operation_final_status = "error_internal_state"
-                    current_operation_final_message = "內部狀態錯誤，索引未初始化。"
+            self._write_kb_status(current_kb_status)
+            self._add_sync_log_entry(log_operation_type, log_source_name_for_op, "error_embedding_all", final_message)
+            return
 
+        # Convert to numpy array for FAISS
+        new_embeddings_np = np.array(new_embeddings, dtype=np.float32)
 
-        final_indexed_vectors = self.index.ntotal if self.index else 0
-        print(f"知識庫更新完成。索引中現在總共有 {final_indexed_vectors} 個向量。")
-        
-        # --- Update Status File ---
-        current_kb_status["overall_status"]["last_any_sync_timestamp"] = operation_timestamp
-        current_kb_status["overall_status"]["total_indexed_vectors"] = final_indexed_vectors
-        
-        if not source_filter: # Full rebuild / update all
-            current_kb_status["overall_status"]["last_full_rebuild_timestamp"] = operation_timestamp
-            final_op_message_for_overall = current_operation_final_message if current_operation_final_status == "success" else f"完整重建/更新: {current_operation_final_message}"
-            current_kb_status["overall_status"]["message"] = final_op_message_for_overall
-            
-            for src_key_loop in sources_to_process: 
-                src_status_update = {
-                    "last_sync_timestamp": operation_timestamp,
-                    "status": source_specific_stats[src_key_loop].get("status", current_operation_final_status) if source_specific_stats[src_key_loop].get("status", "") not in ["pending", ""] else current_operation_final_status,
-                    "message": source_specific_stats[src_key_loop].get("message", current_operation_final_message) if source_specific_stats[src_key_loop].get("message", "") not in ["", "等待處理"] else current_operation_final_message,
-                    "processed_items": source_specific_stats[src_key_loop]["raw_count"],
-                     # 如果是整體更新，且只有一個來源被實際處理(例如其他來源返回空)，則 embedded_items 可以是該來源的嵌入數
-                     # 否則，如果多個來源都有數據並統一嵌入，這裡設為 N/A
-                    "embedded_items": embedded_count_this_run if len(sources_to_process) == 1 and source_specific_stats[src_key_loop]["raw_count"] > 0 else "N/A (Global Embed)"
-                }
-                if src_key_loop == "website":
-                    src_status_update["target_config_url"] = s_config_url
-                elif src_key_loop == "word_documents":
-                    src_status_update["target_config_url"] = word_processor.WORD_DOCS_DIR
-                
-                current_kb_status["sources"].setdefault(src_key_loop, {}).update(src_status_update)
+        # Update FAISS index
+        if self.index is None or (not source_filter and force_rebuild): # If new index or full forced rebuild
+            if new_embeddings_np.shape[0] > 0: # Ensure there's something to build an index with
+                dimension = new_embeddings_np.shape[1]
+                self.index = faiss.IndexFlatL2(dimension) # Using L2 distance
+                self.index.add(new_embeddings_np)
+                self.doc_metadata = new_metadata_for_embeddings
+                print(f"已建立新的 FAISS 索引，包含 {self.index.ntotal} 個向量。")
+            else: # This case should ideally be caught earlier
+                print("沒有可供建立新索引的嵌入。")
+                # Status updates should have happened already
+                return 
+        else: # Adding to existing index
+            if new_embeddings_np.shape[0] > 0: # Ensure there's something to add
+                self.index.add(new_embeddings_np)
+                self.doc_metadata.extend(new_metadata_for_embeddings)
+                print(f"已將 {new_embeddings_np.shape[0]} 個新向量加入現有 FAISS 索引。總數: {self.index.ntotal}。")
+            else:
+                print("沒有新的嵌入可以加入現有索引。") 
+                # This implies unique_chunks_to_embed was empty or all failed to embed,
+                # which should have been handled by earlier return statements.
 
-        elif source_filter in current_kb_status["sources"]: # Specific source updated
-            final_op_message_for_source = f"來源 '{source_filter}' 已同步: {current_operation_final_message}"
-            current_kb_status["overall_status"]["message"] = final_op_message_for_source
-            
-            src_status_update = {
-                "last_sync_timestamp": operation_timestamp,
-                "status": current_operation_final_status,
-                "message": current_operation_final_message,
-                "processed_items": source_specific_stats[source_filter]["raw_count"],
-                "embedded_items": embedded_count_this_run
-            }
-            if source_filter == "website":
-                src_status_update["target_config_url"] = s_config_url
-            elif source_filter == "word_documents":
-                src_status_update["target_config_url"] = word_processor.WORD_DOCS_DIR
-
-            current_kb_status["sources"].setdefault(source_filter, {}).update(src_status_update)
-            
-        self._write_kb_status(current_kb_status)
+        # Save the updated index and metadata
         self._save_vector_store()
-        
-        # Final log entry for the operation
-        final_log_message = f"知識庫更新完成 ({operation_description}). 總向量數: {final_indexed_vectors}. 狀態: {current_operation_final_status}. 訊息: {current_operation_final_message}"
-        self._add_sync_log_entry(log_operation_type, log_source_name_for_op, current_operation_final_status, final_log_message)
-        print(f"知識庫更新完成。索引中現在總共有 {final_indexed_vectors} 個向量。")
 
-        # 確保每個來源的 embedded_items 反映其 processed_items
-        for source_key in current_kb_status.get("sources", {}):
-            source_data = current_kb_status["sources"][source_key]
-            if isinstance(source_data.get("processed_items"), int):
-                source_data["embedded_items"] = source_data["processed_items"]
-            # 可以選擇性處理 processed_items 不是整數的情況，但目前來看它應該是
+        # Final status update
+        current_kb_status["overall_status"]["last_any_sync_timestamp"] = operation_timestamp
+        if not source_filter: current_kb_status["overall_status"]["last_full_rebuild_timestamp"] = operation_timestamp
+        current_kb_status["overall_status"]["total_indexed_vectors"] = self.index.ntotal if self.index else 0
         
-        # 更新日誌和狀態
-        log_message = f"知識庫成功建立/更新。總共 {self.index.ntotal} 個向量。"
-        if source_filter:
-            log_message = f"來源 [{source_filter}] 同步成功。影響總向量數：{self.index.ntotal}。"
-        
-        self._add_sync_log_entry(
-            operation_type=log_operation_type, 
-            source_name=log_source_name_for_op, 
-            status="success", 
-            message=log_message
-        )
+        final_overall_message = f"知識庫更新成功。新增了 {len(new_embeddings)} 個嵌入。總共 {current_kb_status['overall_status']['total_indexed_vectors']} 個向量。"
+        if not source_filter and force_rebuild:
+            final_overall_message = f"知識庫完整重建成功。總共 {current_kb_status['overall_status']['total_indexed_vectors']} 個向量。"
+        elif source_filter and force_rebuild: # This implies a source-specific re-embed.
+            final_overall_message = f"來源 '{source_filter}' 資料已成功重新嵌入 ({len(new_embeddings)} 個區塊)。總知識庫大小: {current_kb_status['overall_status']['total_indexed_vectors']}。"
+        elif source_filter and not force_rebuild:
+            final_overall_message = f"來源 '{source_filter}' 資料已成功同步並新增 {len(new_embeddings)} 個嵌入。總知識庫大小: {current_kb_status['overall_status']['total_indexed_vectors']}。"
+
+
+        current_kb_status["overall_status"]["message"] = final_overall_message
+        print(final_overall_message)
+
+        # Update individual source statuses with embedded counts
+        for src_key, count in embedded_count_by_source.items():
+            if src_key in current_kb_status["sources"]:
+                current_kb_status["sources"][src_key]["embedded_items"] = count
+                if count > 0 :
+                    current_kb_status["sources"][src_key]["status"] = "success"
+                    current_kb_status["sources"][src_key]["message"] = f"成功同步並嵌入 {count} 個區塊。"
+                elif current_kb_status["sources"][src_key]["status"] not in ["error", "success_no_new_data", "success_duplicates_found"]:
+                    # If it was 'processing' or 'success_processed' but 0 embedded from this source
+                    # (e.g. all its chunks failed to embed, or it had no unique chunks for embedding)
+                    # This needs careful state tracking. If it had unique chunks, but they all failed, it's an error_embedding.
+                    # If it had raw chunks, but none were unique, it's success_duplicates_found.
+                    # If it had no raw chunks, it's success_no_new_data.
+                    # The status should have been set earlier for these cases.
+                    # This final update mainly confirms the 'success' if count > 0.
+                    pass
+
+
         self._write_kb_status(current_kb_status)
+        self._add_sync_log_entry(log_operation_type, log_source_name_for_op, "success", final_overall_message)
+
+        print("知識庫更新流程完成。")
 
     def search_knowledge_base(self, query_text, k=5):
         '''Searches the knowledge base for text chunks similar to the query_text.
@@ -622,6 +662,10 @@ class KnowledgeBaseManager:
         
         print(f"搜尋完成，找到 {len(results)} 個結果。")
         return results
+
+    def get_kb_status(self):
+        """Returns the current status of the knowledge base."""
+        return self._read_kb_status()
 
 # --- Main execution for testing --- 
 if __name__ == '__main__':

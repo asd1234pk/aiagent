@@ -277,6 +277,17 @@ class MedicalAssistantApp:
         
         context_str = "\n".join(context_parts)
 
+        # 新增檢查：如果處理後的 context_str 仍然無效
+        # 即使 retrieved_docs 有內容，但如果它們無法形成有效的上下文，
+        # 我們可以選擇返回一個比 LLM 可能產生的通用錯誤更好的訊息。
+        # 這裡的長度檢查 (例如 < 20) 是一個經驗值，可以根據實際情況調整。
+        if not context_str.strip() or len(context_str.strip()) < 20:
+            print("Warning: Context string is empty or too short after processing retrieved documents. Returning a direct message.")
+            # 考慮是否需要在這種情況下也返回 sources_for_response。
+            # 如果來源本身是存在的，但文本內容不足，返回來源可能仍有價值。
+            # 如果不希望返回來源，則第二個參數改為 []
+            return "抱歉，我目前找不到與您問題直接相關的足夠資訊來提供詳細回覆。", sources_for_response
+
         # Use loaded or default prompt settings
         current_prompt = self.user_prompt_template.format(
             context_str=context_str,
@@ -797,7 +808,8 @@ async def upload_zip_archive(file: UploadFile = File(...), extract_to_folder_nam
     if not target_folder_name_str: # If sanitization results in empty string
         target_folder_name_str = "zip_extract_" + datetime.now().strftime("%Y%m%d%H%M%S")
 
-    extract_path = os.path.join(KNOWLEDGE_DOCS_BASE_DIR, target_folder_name_str)
+    # Files extracted from ZIP go into a new subfolder within WORD_DOCS_UPLOAD_DIR
+    extract_path = os.path.join(WORD_DOCS_UPLOAD_DIR, target_folder_name_str)
 
     # Check if target folder (as a file or folder) already exists to avoid overwriting issues
     if os.path.exists(extract_path):
@@ -805,12 +817,12 @@ async def upload_zip_archive(file: UploadFile = File(...), extract_to_folder_nam
         # For simplicity, let's prevent overwriting an existing folder structure by default.
         # A more robust solution might involve appending a timestamp or number if folder exists.
         raise HTTPException(status_code=409, 
-                            detail=f"Target folder '{target_folder_name_str}' already exists. Please choose a different name or ensure it does not exist.")
+                            detail=f"Target folder '{target_folder_name_str}' already exists in '{WORD_DOCS_UPLOAD_DIR}'. Please choose a different name or ensure it does not exist.")
     
     try:
-        os.makedirs(extract_path, exist_ok=True)
+        os.makedirs(extract_path, exist_ok=True) # exist_ok=True is fine, the check above is for the final name
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Could not create target directory '{target_folder_name_str}': {e}")
+        raise HTTPException(status_code=500, detail=f"Could not create target directory '{target_folder_name_str}' in '{WORD_DOCS_UPLOAD_DIR}': {e}")
 
     extracted_count = 0
     try:
@@ -854,21 +866,30 @@ async def upload_zip_archive(file: UploadFile = File(...), extract_to_folder_nam
     except zipfile.BadZipFile:
         # Clean up created (potentially empty) directory on bad zip
         if os.path.exists(extract_path) and not os.listdir(extract_path): 
-            os.rmdir(extract_path)
+            try:
+                os.rmdir(extract_path)
+            except OSError as e_rmdir: # Handle potential race condition or other issues if dir is not empty
+                print(f"Could not remove directory {extract_path} after BadZipFile: {e_rmdir}")
         elif os.path.exists(extract_path): # if it created some files before error, remove the whole tree
-            shutil.rmtree(extract_path)
+            try:
+                shutil.rmtree(extract_path)
+            except OSError as e_rmtree:
+                 print(f"Could not remove directory tree {extract_path} after BadZipFile: {e_rmtree}")
         raise HTTPException(status_code=400, detail="Invalid or corrupted ZIP file.")
     except Exception as e:
         # Clean up on other errors as well
         if os.path.exists(extract_path):
-            shutil.rmtree(extract_path) # Remove created folder and any partial contents
+            try:
+                shutil.rmtree(extract_path) # Remove created folder and any partial contents
+            except OSError as e_rmtree_generic:
+                print(f"Could not remove directory tree {extract_path} after generic error: {e_rmtree_generic}")
         raise HTTPException(status_code=500, detail=f"Failed to extract ZIP file: {e}")
     finally:
         await file.close()
 
     return ZipUploadResponse(
         target_folder=target_folder_name_str,
-        message=f"ZIP file '{file.filename}' successfully extracted to '{target_folder_name_str}'.",
+        message=f"ZIP file '{file.filename}' successfully extracted to '{os.path.join(WORD_DOCS_UPLOAD_DIR, target_folder_name_str)}'.", # Show full relative path
         extracted_files_count=extracted_count
     )
 
