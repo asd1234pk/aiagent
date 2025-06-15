@@ -294,6 +294,13 @@ class MedicalAssistantApp:
             user_question=user_question
         )
 
+        # --- BEGIN ADDED DEBUG LOGGING ---
+        print("--- DEBUG: Preparing to call OpenAI API ---")
+        print(f"System Message: {self.system_message}")
+        print(f"User Prompt (current_prompt): {current_prompt}")
+        print(f"Temperature: {self.temperature}")
+        # --- END ADDED DEBUG LOGGING ---
+
         if not self.client:
             print("ERROR: OpenAI client not available. Cannot generate LLM answer.")
             return "AI 模型客戶端未初始化，無法生成回答。請檢查 API 金鑰設定。", sources_for_response
