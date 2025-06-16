@@ -358,10 +358,10 @@ class KnowledgeBaseManager:
             raw_chunks_this_source = []
             try:
                 if current_source == "website":
-                    # 在呼叫 process_all_documents 之前更新狀態
+                    # 在呼叫 process_website_articles 之前更新狀態
                     current_kb_status["sources"]["website"].update(source_status_update)
                     self._write_kb_status(current_kb_status) # Write intermediate status
-                    raw_chunks_this_source = website_scraper.process_all_documents()
+                    raw_chunks_this_source = website_scraper.process_website_articles()
                 elif current_source == "word_documents":
                      # 在呼叫 process_all_documents 之前更新狀態
                     current_kb_status["sources"]["word_documents"].update(source_status_update)
