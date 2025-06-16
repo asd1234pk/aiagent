@@ -405,6 +405,10 @@ class KnowledgeBaseManager:
                     "embedded_items": 0 # Reset embedded count for this sync, will be updated later
                 })
 
+                # Add a key to the chunk to trace it back to its source processor
+                for chunk in raw_chunks_this_source:
+                    chunk["data_source_key"] = current_source
+
             except Exception as e:
                 error_message = f"處理來源 {current_source} 時發生錯誤: {e}"
                 print(error_message)
@@ -595,25 +599,33 @@ class KnowledgeBaseManager:
         current_kb_status["overall_status"]["message"] = final_overall_message
         print(final_overall_message)
 
-        # Update individual source statuses with embedded counts
-        for src_key, count in embedded_count_by_source.items():
-            if src_key in current_kb_status["sources"]:
-                current_kb_status["sources"][src_key]["embedded_items"] = count
-                if count > 0 :
-                    current_kb_status["sources"][src_key]["status"] = "success"
-                    current_kb_status["sources"][src_key]["message"] = f"成功同步並嵌入 {count} 個區塊。"
-                elif current_kb_status["sources"][src_key]["status"] not in ["error", "success_no_new_data", "success_duplicates_found"]:
-                    # If it was 'processing' or 'success_processed' but 0 embedded from this source
-                    # (e.g. all its chunks failed to embed, or it had no unique chunks for embedding)
-                    # This needs careful state tracking. If it had unique chunks, but they all failed, it's an error_embedding.
-                    # If it had raw chunks, but none were unique, it's success_duplicates_found.
-                    # If it had no raw chunks, it's success_no_new_data.
-                    # The status should have been set earlier for these cases.
-                    # This final update mainly confirms the 'success' if count > 0.
-                    pass
+        # 這個 bug
+        source_embedding_counts = {src: 0 for src in sources_to_process}
+        # 我們需要確保 chunk 中繼資料裡有 data_source_key
+        for meta in new_metadata_for_embeddings: # 只檢查新嵌入的
+            source_key = meta.get("data_source_key") 
+            if source_key in source_embedding_counts:
+                source_embedding_counts[source_key] += 1
+        
+        for src in sources_to_process:
+            final_embedded_count = source_embedding_counts.get(src, 0)
+            if current_kb_status["sources"][src]["status"] != "error": # 只更新成功的
+                # 只有當這個來源確實有區塊被嵌入時，才更新為 success
+                if final_embedded_count > 0:
+                    current_kb_status["sources"][src]["status"] = "success"
+                    current_kb_status["sources"][src]["message"] = f"成功同步並嵌入 {final_embedded_count} 個區塊。"
+                    current_kb_status["sources"][src]["embedded_items"] = final_embedded_count
+                # 如果這個來源原始有抓到東西，但最後沒有任何一個被嵌入(例如全是重複)，也更新狀態
+                elif current_kb_status["sources"][src]["processed_items"] > 0 and final_embedded_count == 0:
+                    # 保持之前的狀態，例如 success_no_new_data 或 success_duplicates_found
+                    # 這裡主要是確保 embedded_items 被正確設為 0
+                    current_kb_status["sources"][src]["embedded_items"] = 0
+                    if current_kb_status["sources"][src]["status"] == "success_processed":
+                        current_kb_status["sources"][src]["status"] = "success_no_new_data"
+                        current_kb_status["sources"][src]["message"] = "成功處理，但所有提取的區塊均為重複或未被嵌入。"
 
 
-        self._write_kb_status(current_kb_status)
+        self._write_kb_status(current_kb_status) # 在記錄日誌前最後一次寫入最完整的狀態
         self._add_sync_log_entry(log_operation_type, log_source_name_for_op, "success", final_overall_message)
 
         print("知識庫更新流程完成。")
